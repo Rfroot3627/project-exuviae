@@ -1,0 +1,60 @@
+# ---- OS / Editor ----
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+.vscode/
+.idea/
+*.swp
+
+# ---- Python: bytecode / cache ----
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Virtual env ----
+.venv/
+venv/
+ENV/
+env/
+
+# ---- Packaging / build artifacts ----
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# ---- Logs / runtime outputs ----
+*.log
+logs/
+*.pid
+
+# ---- Project runtime data (v0.1 writes snapshots/logs here) ----
+data/
+hub/data/
+node/data/
+
+# ---- Local configs / secrets ----
+*.env
+.env
+.env.*
+*.local
+settings.local.*
+config.local.*
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Node.js (in case tools later) ----
+node_modules/
+
+# ---- Temporary / backups ----
+*.tmp
+*.bak
+*.old
+*~
