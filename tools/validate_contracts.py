@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import importlib.util
 from pathlib import Path
 from typing import Any, Iterable, Tuple
 
@@ -14,11 +15,54 @@ from openapi_spec_validator import validate_spec
 ROOT = Path(__file__).resolve().parents[1]
 
 SNAPSHOT_ID_RE = re.compile(r"^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$")
-IMAGE_PATH_RE = re.compile(
-    r"^data/snapshots/[0-9]{4}-[0-9]{2}-[0-9]{2}/"
-    r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}/"
-    r"s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.jpg$"
-)
+
+
+def _load_hub_config_constants() -> tuple[str, str]:
+    """
+    Load DATA_ROOT and SNAPSHOT_SUBDIR from hub config.py without importing the hub package.
+    Falls back to ("data", "snapshots") if not found.
+    """
+    cfg_path = ROOT / "hub" / "src" / "exuviae_hub" / "infrastructure" / "config.py"
+    if not cfg_path.exists():
+        return ("data", "snapshots")
+
+    spec = importlib.util.spec_from_file_location("_exuviae_hub_config", cfg_path)
+    if spec is None or spec.loader is None:
+        return ("data", "snapshots")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore
+
+    data_root = getattr(module, "DATA_ROOT", "data")
+    subdir = getattr(module, "SNAPSHOT_SUBDIR", "snapshots")
+    return (str(data_root), str(subdir))
+
+
+def _build_image_path_re() -> re.Pattern[str]:
+    """
+    Build v0.1 image_path regex using hub config constants.
+    Expected layout:
+      {DATA_ROOT}/{SNAPSHOT_SUBDIR}/YYYY-MM-DD/<node_id>/<snapshot_id>.jpg
+    """
+    data_root, subdir = _load_hub_config_constants()
+
+    # Normalize to POSIX-like (contracts/examples use forward slashes)
+    data_root = data_root.strip("/\\")
+    subdir = subdir.strip("/\\")
+
+    # Escape in case you later change to something with regex meta chars
+    dr = re.escape(data_root)
+    sd = re.escape(subdir)
+
+    # Keep v0.1 constraints:
+    # - date bucket YYYY-MM-DD
+    # - node_id: ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$
+    # - snapshot_id: s-YYYYMMDD-HHMMSS-<8hex>
+    return re.compile(
+        rf"^{dr}/{sd}/[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}/"
+        rf"[a-zA-Z0-9][a-zA-Z0-9._-]{{0,63}}/"
+        rf"s-[0-9]{{8}}-[0-9]{{6}}-[0-9a-f]{{8}}\.jpg$"
+    )
 
 
 def load_json(p: Path):
@@ -91,6 +135,8 @@ def scan_examples_fields():
         ROOT / "node" / "contracts",
     ]
 
+    image_path_re = _build_image_path_re()
+
     json_files: list[Path] = []
     for base in example_roots:
         if not base.exists():
@@ -117,8 +163,8 @@ def scan_examples_fields():
 
         # image_path checks
         for ipath, ival in iter_field_values(data, "image_path"):
-            if not IMAGE_PATH_RE.match(ival):
-                failures.append((p, ipath, f"image_path {ival!r} does not match {IMAGE_PATH_RE.pattern!r}"))
+            if not image_path_re.match(ival):
+                failures.append((p, ipath, f"image_path {ival!r} does not match {image_path_re.pattern!r}"))
 
     if failures:
         print("[FAIL] examples field scan failed:")
