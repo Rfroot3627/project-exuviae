@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import sys
-import importlib.util
 from pathlib import Path
 from typing import Any, Iterable, Tuple
 
@@ -14,9 +14,22 @@ from openapi_spec_validator import validate_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 
-SNAPSHOT_ID_RE = re.compile(r"^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$")
+# v0.1 canonical patterns (SSOT for snapshot_id format)
+SNAPSHOT_ID_PATTERN = r"^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
+SNAPSHOT_ID_RE = re.compile(SNAPSHOT_ID_PATTERN)
 
 
+def load_json(p: Path):
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def load_yaml(p: Path):
+    return yaml.safe_load(p.read_text(encoding="utf-8"))
+
+
+# -----------------------------
+# Dynamic rule: image_path from hub config constants
+# -----------------------------
 def _load_hub_config_constants() -> tuple[str, str]:
     """
     Load DATA_ROOT and SNAPSHOT_SUBDIR from hub config.py without importing the hub package.
@@ -38,41 +51,34 @@ def _load_hub_config_constants() -> tuple[str, str]:
     return (str(data_root), str(subdir))
 
 
-def _build_image_path_re() -> re.Pattern[str]:
+def _build_image_path_pattern() -> str:
     """
-    Build v0.1 image_path regex using hub config constants.
+    Build v0.1 image_path pattern string using hub config constants.
     Expected layout:
       {DATA_ROOT}/{SNAPSHOT_SUBDIR}/YYYY-MM-DD/<node_id>/<snapshot_id>.jpg
     """
     data_root, subdir = _load_hub_config_constants()
 
-    # Normalize to POSIX-like (contracts/examples use forward slashes)
+    # Normalize (contracts/examples use forward slashes)
     data_root = data_root.strip("/\\")
     subdir = subdir.strip("/\\")
-
-    # Escape in case you later change to something with regex meta chars
     dr = re.escape(data_root)
     sd = re.escape(subdir)
 
-    # Keep v0.1 constraints:
-    # - date bucket YYYY-MM-DD
-    # - node_id: ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$
-    # - snapshot_id: s-YYYYMMDD-HHMMSS-<8hex>
-    return re.compile(
+    return (
         rf"^{dr}/{sd}/[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}/"
         rf"[a-zA-Z0-9][a-zA-Z0-9._-]{{0,63}}/"
         rf"s-[0-9]{{8}}-[0-9]{{6}}-[0-9a-f]{{8}}\.jpg$"
     )
 
 
-def load_json(p: Path):
-    return json.loads(p.read_text(encoding="utf-8"))
+def _build_image_path_re() -> re.Pattern[str]:
+    return re.compile(_build_image_path_pattern())
 
 
-def load_yaml(p: Path):
-    return yaml.safe_load(p.read_text(encoding="utf-8"))
-
-
+# -----------------------------
+# Validators
+# -----------------------------
 def validate_jsonschema_examples(schema_path: Path, examples_dir: Path):
     schema = load_json(schema_path)
     validator = jsonschema.Draft202012Validator(schema)
@@ -107,64 +113,10 @@ def validate_openapi(openapi_path: Path) -> dict:
     return spec
 
 
-def _get_openapi_image_path_pattern(spec: dict) -> str:
-    """
-    Extract image_path.pattern from:
-      components.schemas.SnapshotUploadResponse.properties.image_path.pattern
-    """
-    try:
-        return (
-            spec["components"]["schemas"]["SnapshotUploadResponse"]
-            ["properties"]["image_path"]["pattern"]
-        )
-    except Exception as e:
-        raise KeyError(
-            "OpenAPI missing components.schemas.SnapshotUploadResponse.properties.image_path.pattern"
-        ) from e
-
-
-def _check_openapi_image_path_pattern_consistency(spec: dict):
-    """
-    Ensure OpenAPI image_path pattern equals the dynamically generated v0.1 image_path regex.
-    Also verify both patterns match a canonical sample path.
-    """
-    openapi_pattern = _get_openapi_image_path_pattern(spec).strip()
-    image_path_re = _build_image_path_re()
-    expected_pattern = image_path_re.pattern
-
-    # Strict string equality check (best for preventing silent drift)
-    if openapi_pattern != expected_pattern:
-        print("[FAIL] OpenAPI image_path.pattern mismatch:")
-        print(f"  - openapi : {openapi_pattern!r}")
-        print(f"  - expected: {expected_pattern!r}")
-        raise SystemExit(1)
-
-    # Additionally, sanity check both patterns match a canonical sample
-    data_root, subdir = _load_hub_config_constants()
-    data_root = str(data_root).strip("/\\")
-    subdir = str(subdir).strip("/\\")
-    sample = f"{data_root}/{subdir}/2026-02-02/cam-01/s-20260202-173012-4f2a9c10.jpg"
-
-    if not re.compile(openapi_pattern).match(sample):
-        print("[FAIL] OpenAPI image_path.pattern does not match canonical sample:")
-        print(f"  - pattern: {openapi_pattern!r}")
-        print(f"  - sample : {sample!r}")
-        raise SystemExit(1)
-
-    if not image_path_re.match(sample):
-        print("[FAIL] Generated image_path regex does not match canonical sample:")
-        print(f"  - pattern: {expected_pattern!r}")
-        print(f"  - sample : {sample!r}")
-        raise SystemExit(1)
-
-    print("[OK]   OpenAPI image_path.pattern matches generated rule")
-
-
+# -----------------------------
+# Scanners for examples
+# -----------------------------
 def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> Iterable[Tuple[Tuple[str, ...], str]]:
-    """
-    Recursively traverse JSON-like objects and yield (path, value) for any
-    string field named field_name.
-    """
     if isinstance(obj, dict):
         for k, v in obj.items():
             new_path = path + (str(k),)
@@ -179,17 +131,10 @@ def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> 
 
 
 def scan_examples_fields():
-    """
-    Scan all examples JSON files under contracts/**/examples and ensure:
-    - any snapshot_id matches v0.1 pattern
-    - any image_path matches v0.1 snapshot storage path pattern
-    """
     example_roots = [
         ROOT / "hub" / "contracts",
         ROOT / "node" / "contracts",
     ]
-
-    image_path_re = _build_image_path_re()
 
     json_files: list[Path] = []
     for base in example_roots:
@@ -201,6 +146,7 @@ def scan_examples_fields():
         print("[WARN] no example json files found under hub/node contracts examples")
         return
 
+    image_path_re = _build_image_path_re()
     failures = []
 
     for p in json_files:
@@ -210,12 +156,10 @@ def scan_examples_fields():
             failures.append((p, ("<parse>",), f"JSON parse failed: {e}"))
             continue
 
-        # snapshot_id checks
         for spath, sval in iter_field_values(data, "snapshot_id"):
             if not SNAPSHOT_ID_RE.match(sval):
-                failures.append((p, spath, f"snapshot_id {sval!r} does not match {SNAPSHOT_ID_RE.pattern!r}"))
+                failures.append((p, spath, f"snapshot_id {sval!r} does not match {SNAPSHOT_ID_PATTERN!r}"))
 
-        # image_path checks
         for ipath, ival in iter_field_values(data, "image_path"):
             if not image_path_re.match(ival):
                 failures.append((p, ipath, f"image_path {ival!r} does not match {image_path_re.pattern!r}"))
@@ -230,6 +174,89 @@ def scan_examples_fields():
     print(f"[OK]   examples scan passed ({len(json_files)} files scanned)")
 
 
+# -----------------------------
+# Contract consistency checks
+# -----------------------------
+def _get_openapi_prop_pattern(spec: dict, schema_name: str, prop_name: str) -> str:
+    try:
+        return spec["components"]["schemas"][schema_name]["properties"][prop_name]["pattern"]
+    except Exception as e:
+        raise KeyError(
+            f"OpenAPI missing components.schemas.{schema_name}.properties.{prop_name}.pattern"
+        ) from e
+
+
+def _get_jsonschema_defs_pattern(schema_path: Path, defs_key: str) -> str:
+    schema = load_json(schema_path)
+    try:
+        return schema["$defs"][defs_key]["pattern"]
+    except Exception as e:
+        raise KeyError(f"JSON schema missing $defs.{defs_key}.pattern in {schema_path}") from e
+
+
+def _check_pattern_equal(name: str, left: str, right: str):
+    if left != right:
+        print(f"[FAIL] pattern mismatch: {name}")
+        print(f"  - left : {left!r}")
+        print(f"  - right: {right!r}")
+        raise SystemExit(1)
+    print(f"[OK]   pattern equal: {name}")
+
+
+def _check_pattern_matches_sample(name: str, pattern: str, sample: str):
+    if not re.compile(pattern).match(sample):
+        print(f"[FAIL] pattern does not match canonical sample: {name}")
+        print(f"  - pattern: {pattern!r}")
+        print(f"  - sample : {sample!r}")
+        raise SystemExit(1)
+    print(f"[OK]   pattern matches sample: {name}")
+
+
+def check_contract_consistency(spec: dict):
+    # --- snapshot_id patterns ---
+    # OpenAPI snapshot_id pattern (where we expose it)
+    # Here: CaptureResponse.snapshot_id
+    openapi_snapshot_id = _get_openapi_prop_pattern(spec, "CaptureResponse", "snapshot_id")
+    _check_pattern_equal("openapi.CaptureResponse.snapshot_id", openapi_snapshot_id, SNAPSHOT_ID_PATTERN)
+
+    # WS schema snapshot_id comes from $defs.SnapshotId
+    ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
+    ws_snapshot_id = _get_jsonschema_defs_pattern(ws_schema, "SnapshotId")
+    _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot_id, SNAPSHOT_ID_PATTERN)
+
+    # Logging schema snapshot_id comes from $defs.SnapshotId
+    log_schema = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
+    log_snapshot_id = _get_jsonschema_defs_pattern(log_schema, "SnapshotId")
+    _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot_id, SNAPSHOT_ID_PATTERN)
+
+    # --- image_path patterns ---
+    expected_image_path_pattern = _build_image_path_pattern()
+
+    # OpenAPI upload response image_path pattern
+    openapi_image_path = _get_openapi_prop_pattern(spec, "SnapshotUploadResponse", "image_path")
+    _check_pattern_equal("openapi.SnapshotUploadResponse.image_path", openapi_image_path, expected_image_path_pattern)
+
+    # Logging schema image_path pattern from $defs.ImagePath (if present)
+    try:
+        log_image_path = _get_jsonschema_defs_pattern(log_schema, "ImagePath")
+        _check_pattern_equal("logging.$defs.ImagePath", log_image_path, expected_image_path_pattern)
+    except KeyError:
+        print("[WARN] logging schema has no $defs.ImagePath.pattern (skipped)")
+
+    # --- canonical sample checks (both kinds) ---
+    snapshot_sample = "s-20260202-173012-4f2a9c10"
+    _check_pattern_matches_sample("snapshot_id.v0.1", SNAPSHOT_ID_PATTERN, snapshot_sample)
+
+    data_root, subdir = _load_hub_config_constants()
+    data_root = str(data_root).strip("/\\")
+    subdir = str(subdir).strip("/\\")
+    image_sample = f"{data_root}/{subdir}/2026-02-02/cam-01/{snapshot_sample}.jpg"
+    _check_pattern_matches_sample("image_path.v0.1", expected_image_path_pattern, image_sample)
+
+
+# -----------------------------
+# Main
+# -----------------------------
 def main():
     # --- OpenAPI ---
     openapi = ROOT / "hub" / "contracts" / "http" / "openapi.v0.yaml"
@@ -237,26 +264,25 @@ def main():
         print(f"[FAIL] missing: {openapi}")
         return 1
     spec = validate_openapi(openapi)
-    _check_openapi_image_path_pattern_consistency(spec)
 
-
-    # --- WebSocket schema + examples ---
+    # --- JSON schema + examples ---
     ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
     ws_examples = ROOT / "hub" / "contracts" / "ws" / "examples"
     validate_jsonschema_examples(ws_schema, ws_examples)
 
-    # --- Capabilities schema + examples ---
     cap_schema = ROOT / "hub" / "contracts" / "capabilities" / "node_register.schema.json"
     cap_examples = ROOT / "hub" / "contracts" / "capabilities" / "examples"
     validate_jsonschema_examples(cap_schema, cap_examples)
 
-    # --- Logging schema + examples ---
     log_schema = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
     log_examples = ROOT / "hub" / "contracts" / "logging" / "examples"
     validate_jsonschema_examples(log_schema, log_examples)
 
     # --- Extra scan: snapshot_id + image_path across all examples ---
     scan_examples_fields()
+
+    # --- Cross-contract consistency checks (patterns must not drift) ---
+    check_contract_consistency(spec)
 
     print("\nAll contracts OK.")
     return 0

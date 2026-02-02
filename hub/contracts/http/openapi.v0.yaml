@@ -176,6 +176,7 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+          pattern: '^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$'
 
     SnapshotUploadForm:
       type: object
