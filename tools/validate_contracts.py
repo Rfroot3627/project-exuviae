@@ -14,6 +14,11 @@ from openapi_spec_validator import validate_spec
 ROOT = Path(__file__).resolve().parents[1]
 
 SNAPSHOT_ID_RE = re.compile(r"^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$")
+IMAGE_PATH_RE = re.compile(
+    r"^data/snapshots/[0-9]{4}-[0-9]{2}-[0-9]{2}/"
+    r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}/"
+    r"s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\.jpg$"
+)
 
 
 def load_json(p: Path):
@@ -51,36 +56,35 @@ def validate_jsonschema_examples(schema_path: Path, examples_dir: Path):
 
 def validate_openapi(openapi_path: Path):
     spec = load_yaml(openapi_path)
-
     if not isinstance(spec, dict) or "openapi" not in spec:
         raise ValueError("Not a valid OpenAPI document (missing 'openapi' key)")
-
     validate_spec(spec)
     print(f"[OK]   validated OpenAPI: {openapi_path}")
 
 
-def iter_snapshot_ids(obj: Any, path: Tuple[str, ...] = ()) -> Iterable[Tuple[Tuple[str, ...], str]]:
+def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> Iterable[Tuple[Tuple[str, ...], str]]:
     """
-    Recursively traverse JSON-like objects and yield (path, snapshot_id_value)
-    for any field named 'snapshot_id'.
+    Recursively traverse JSON-like objects and yield (path, value) for any
+    string field named field_name.
     """
     if isinstance(obj, dict):
         for k, v in obj.items():
             new_path = path + (str(k),)
-            if k == "snapshot_id" and isinstance(v, str):
+            if k == field_name and isinstance(v, str):
                 yield (new_path, v)
             else:
-                yield from iter_snapshot_ids(v, new_path)
+                yield from iter_field_values(v, field_name, new_path)
     elif isinstance(obj, list):
         for i, v in enumerate(obj):
             new_path = path + (f"[{i}]",)
-            yield from iter_snapshot_ids(v, new_path)
+            yield from iter_field_values(v, field_name, new_path)
 
 
-def scan_examples_snapshot_ids():
+def scan_examples_fields():
     """
-    Scan all examples JSON files under contracts/**/examples and ensure any
-    snapshot_id matches v0.1 pattern: s-YYYYMMDD-HHMMSS-<8hex>
+    Scan all examples JSON files under contracts/**/examples and ensure:
+    - any snapshot_id matches v0.1 pattern
+    - any image_path matches v0.1 snapshot storage path pattern
     """
     example_roots = [
         ROOT / "hub" / "contracts",
@@ -98,6 +102,7 @@ def scan_examples_snapshot_ids():
         return
 
     failures = []
+
     for p in json_files:
         try:
             data = load_json(p)
@@ -105,23 +110,24 @@ def scan_examples_snapshot_ids():
             failures.append((p, ("<parse>",), f"JSON parse failed: {e}"))
             continue
 
-        found_any = False
-        for spath, sval in iter_snapshot_ids(data):
-            found_any = True
+        # snapshot_id checks
+        for spath, sval in iter_field_values(data, "snapshot_id"):
             if not SNAPSHOT_ID_RE.match(sval):
-                failures.append((p, spath, sval))
+                failures.append((p, spath, f"snapshot_id {sval!r} does not match {SNAPSHOT_ID_RE.pattern!r}"))
 
-        # Optional: could warn if a file is expected to have snapshot_id but doesn't.
-        # We keep v0.1 minimal: no warning here.
+        # image_path checks
+        for ipath, ival in iter_field_values(data, "image_path"):
+            if not IMAGE_PATH_RE.match(ival):
+                failures.append((p, ipath, f"image_path {ival!r} does not match {IMAGE_PATH_RE.pattern!r}"))
 
     if failures:
-        print("[FAIL] snapshot_id pattern scan failed:")
-        for p, spath, sval in failures:
-            jpath = "/".join(spath)
-            print(f"  - {p}: {jpath} = {sval!r}")
+        print("[FAIL] examples field scan failed:")
+        for p, jpath, msg in failures:
+            path_str = "/".join(jpath)
+            print(f"  - {p}: {path_str}: {msg}")
         raise SystemExit(1)
 
-    print(f"[OK]   snapshot_id scan passed ({len(json_files)} files scanned)")
+    print(f"[OK]   examples scan passed ({len(json_files)} files scanned)")
 
 
 def main():
@@ -147,8 +153,8 @@ def main():
     log_examples = ROOT / "hub" / "contracts" / "logging" / "examples"
     validate_jsonschema_examples(log_schema, log_examples)
 
-    # --- Extra scan: snapshot_id in all examples ---
-    scan_examples_snapshot_ids()
+    # --- Extra scan: snapshot_id + image_path across all examples ---
+    scan_examples_fields()
 
     print("\nAll contracts OK.")
     return 0
