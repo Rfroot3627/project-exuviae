@@ -98,12 +98,66 @@ def validate_jsonschema_examples(schema_path: Path, examples_dir: Path):
         print(f"[OK]   {ex}")
 
 
-def validate_openapi(openapi_path: Path):
+def validate_openapi(openapi_path: Path) -> dict:
     spec = load_yaml(openapi_path)
     if not isinstance(spec, dict) or "openapi" not in spec:
         raise ValueError("Not a valid OpenAPI document (missing 'openapi' key)")
     validate_spec(spec)
     print(f"[OK]   validated OpenAPI: {openapi_path}")
+    return spec
+
+
+def _get_openapi_image_path_pattern(spec: dict) -> str:
+    """
+    Extract image_path.pattern from:
+      components.schemas.SnapshotUploadResponse.properties.image_path.pattern
+    """
+    try:
+        return (
+            spec["components"]["schemas"]["SnapshotUploadResponse"]
+            ["properties"]["image_path"]["pattern"]
+        )
+    except Exception as e:
+        raise KeyError(
+            "OpenAPI missing components.schemas.SnapshotUploadResponse.properties.image_path.pattern"
+        ) from e
+
+
+def _check_openapi_image_path_pattern_consistency(spec: dict):
+    """
+    Ensure OpenAPI image_path pattern equals the dynamically generated v0.1 image_path regex.
+    Also verify both patterns match a canonical sample path.
+    """
+    openapi_pattern = _get_openapi_image_path_pattern(spec).strip()
+    image_path_re = _build_image_path_re()
+    expected_pattern = image_path_re.pattern
+
+    # Strict string equality check (best for preventing silent drift)
+    if openapi_pattern != expected_pattern:
+        print("[FAIL] OpenAPI image_path.pattern mismatch:")
+        print(f"  - openapi : {openapi_pattern!r}")
+        print(f"  - expected: {expected_pattern!r}")
+        raise SystemExit(1)
+
+    # Additionally, sanity check both patterns match a canonical sample
+    data_root, subdir = _load_hub_config_constants()
+    data_root = str(data_root).strip("/\\")
+    subdir = str(subdir).strip("/\\")
+    sample = f"{data_root}/{subdir}/2026-02-02/cam-01/s-20260202-173012-4f2a9c10.jpg"
+
+    if not re.compile(openapi_pattern).match(sample):
+        print("[FAIL] OpenAPI image_path.pattern does not match canonical sample:")
+        print(f"  - pattern: {openapi_pattern!r}")
+        print(f"  - sample : {sample!r}")
+        raise SystemExit(1)
+
+    if not image_path_re.match(sample):
+        print("[FAIL] Generated image_path regex does not match canonical sample:")
+        print(f"  - pattern: {expected_pattern!r}")
+        print(f"  - sample : {sample!r}")
+        raise SystemExit(1)
+
+    print("[OK]   OpenAPI image_path.pattern matches generated rule")
 
 
 def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> Iterable[Tuple[Tuple[str, ...], str]]:
@@ -182,7 +236,9 @@ def main():
     if not openapi.exists():
         print(f"[FAIL] missing: {openapi}")
         return 1
-    validate_openapi(openapi)
+    spec = validate_openapi(openapi)
+    _check_openapi_image_path_pattern_consistency(spec)
+
 
     # --- WebSocket schema + examples ---
     ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
