@@ -1,5 +1,5 @@
 {
   "type": "command.capture_snapshot",
-  "snapshot_id": "s-20260202-173012-4f2a",
+  "snapshot_id": "s-20260202-173012-4f2a9c10",
   "params": { "format": "jpeg", "resolution": "640x480" }
 }
