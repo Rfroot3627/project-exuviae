@@ -1,0 +1,11 @@
+node_id: cam-01
+
+hub:
+  http_base: "http://127.0.0.1:8000"
+  ws_url: "ws://127.0.0.1:8000/ws/v0"
+
+features:
+  camera:
+    enabled: true
+    format: "jpeg"
+    resolution: "640x480"
