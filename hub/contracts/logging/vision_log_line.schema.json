@@ -13,7 +13,7 @@
       "maxLength": 64,
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$"
     },
-    "snapshot_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
     "image_path": { "type": "string", "minLength": 1, "maxLength": 512 },
     "desc": { "type": "string", "minLength": 1, "maxLength": 4096 },
 
@@ -23,6 +23,14 @@
       "type": "array",
       "items": { "type": "string", "maxLength": 64 },
       "maxItems": 32
+    }
+  },
+  "$defs": {
+    "SnapshotId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
     }
   }
 }

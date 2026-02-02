@@ -18,19 +18,23 @@
       }
     },
 
+    "SnapshotId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
+    },
+
     "CommandCaptureSnapshot": {
       "allOf": [
         { "$ref": "#/$defs/Base" },
         {
           "type": "object",
           "required": ["type", "snapshot_id", "params"],
+          "additionalProperties": true,
           "properties": {
             "type": { "const": "command.capture_snapshot" },
-            "snapshot_id": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            },
+            "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
             "params": {
               "type": "object",
               "required": ["format", "resolution"],
@@ -55,9 +59,10 @@
         {
           "type": "object",
           "required": ["type", "snapshot_id", "status"],
+          "additionalProperties": true,
           "properties": {
             "type": { "const": "ack" },
-            "snapshot_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
             "status": {
               "type": "string",
               "enum": ["capturing", "uploading", "done"]
@@ -73,9 +78,10 @@
         {
           "type": "object",
           "required": ["type", "snapshot_id", "code", "message"],
+          "additionalProperties": true,
           "properties": {
             "type": { "const": "error" },
-            "snapshot_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
             "code": {
               "type": "string",
               "enum": [
@@ -98,6 +104,7 @@
         {
           "type": "object",
           "required": ["type"],
+          "additionalProperties": true,
           "properties": {
             "type": { "const": "heartbeat" },
             "ts": { "type": "string" }
