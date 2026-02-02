@@ -14,9 +14,12 @@ from openapi_spec_validator import validate_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# v0.1 canonical patterns (SSOT for snapshot_id format)
+# v0.1 canonical patterns (SSOT for snapshot_id/node_id formats)
 SNAPSHOT_ID_PATTERN = r"^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
+NODE_ID_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$"
+
 SNAPSHOT_ID_RE = re.compile(SNAPSHOT_ID_PATTERN)
+NODE_ID_RE = re.compile(NODE_ID_PATTERN)
 
 
 def load_json(p: Path):
@@ -131,6 +134,12 @@ def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> 
 
 
 def scan_examples_fields():
+    """
+    Scan all example JSON files under hub/node contracts examples and ensure:
+    - snapshot_id matches v0.1
+    - image_path matches v0.1 (dynamic from hub config)
+    - node_id matches v0.1 (if present in examples)
+    """
     example_roots = [
         ROOT / "hub" / "contracts",
         ROOT / "node" / "contracts",
@@ -164,6 +173,10 @@ def scan_examples_fields():
             if not image_path_re.match(ival):
                 failures.append((p, ipath, f"image_path {ival!r} does not match {image_path_re.pattern!r}"))
 
+        for npath, nval in iter_field_values(data, "node_id"):
+            if not NODE_ID_RE.match(nval):
+                failures.append((p, npath, f"node_id {nval!r} does not match {NODE_ID_PATTERN!r}"))
+
     if failures:
         print("[FAIL] examples field scan failed:")
         for p, jpath, msg in failures:
@@ -194,6 +207,14 @@ def _get_jsonschema_defs_pattern(schema_path: Path, defs_key: str) -> str:
         raise KeyError(f"JSON schema missing $defs.{defs_key}.pattern in {schema_path}") from e
 
 
+def _get_jsonschema_prop_pattern(schema_path: Path, prop_name: str) -> str:
+    schema = load_json(schema_path)
+    try:
+        return schema["properties"][prop_name]["pattern"]
+    except Exception as e:
+        raise KeyError(f"JSON schema missing properties.{prop_name}.pattern in {schema_path}") from e
+
+
 def _check_pattern_equal(name: str, left: str, right: str):
     if left != right:
         print(f"[FAIL] pattern mismatch: {name}")
@@ -213,44 +234,63 @@ def _check_pattern_matches_sample(name: str, pattern: str, sample: str):
 
 
 def check_contract_consistency(spec: dict):
-    # --- snapshot_id patterns ---
-    # OpenAPI snapshot_id pattern (where we expose it)
-    # Here: CaptureResponse.snapshot_id
+    # --- snapshot_id patterns must not drift ---
     openapi_snapshot_id = _get_openapi_prop_pattern(spec, "CaptureResponse", "snapshot_id")
     _check_pattern_equal("openapi.CaptureResponse.snapshot_id", openapi_snapshot_id, SNAPSHOT_ID_PATTERN)
 
-    # WS schema snapshot_id comes from $defs.SnapshotId
     ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
     ws_snapshot_id = _get_jsonschema_defs_pattern(ws_schema, "SnapshotId")
     _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot_id, SNAPSHOT_ID_PATTERN)
 
-    # Logging schema snapshot_id comes from $defs.SnapshotId
     log_schema = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
     log_snapshot_id = _get_jsonschema_defs_pattern(log_schema, "SnapshotId")
     _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot_id, SNAPSHOT_ID_PATTERN)
 
-    # --- image_path patterns ---
+    # --- image_path patterns must not drift ---
     expected_image_path_pattern = _build_image_path_pattern()
-
-    # OpenAPI upload response image_path pattern
     openapi_image_path = _get_openapi_prop_pattern(spec, "SnapshotUploadResponse", "image_path")
     _check_pattern_equal("openapi.SnapshotUploadResponse.image_path", openapi_image_path, expected_image_path_pattern)
 
-    # Logging schema image_path pattern from $defs.ImagePath (if present)
     try:
         log_image_path = _get_jsonschema_defs_pattern(log_schema, "ImagePath")
         _check_pattern_equal("logging.$defs.ImagePath", log_image_path, expected_image_path_pattern)
     except KeyError:
         print("[WARN] logging schema has no $defs.ImagePath.pattern (skipped)")
 
-    # --- canonical sample checks (both kinds) ---
+    # --- node_id patterns must not drift ---
+    cap_schema = ROOT / "hub" / "contracts" / "capabilities" / "node_register.schema.json"
+    cap_node_id = _get_jsonschema_prop_pattern(cap_schema, "node_id")
+    _check_pattern_equal("capabilities.node_id", cap_node_id, NODE_ID_PATTERN)
+
+    log_node_id = _get_jsonschema_prop_pattern(log_schema, "node_id")
+    _check_pattern_equal("logging.node_id", log_node_id, NODE_ID_PATTERN)
+
+    # WS may or may not define NodeId; if present, enforce
+    try:
+        ws_node_id = _get_jsonschema_defs_pattern(ws_schema, "NodeId")
+        _check_pattern_equal("ws.$defs.NodeId", ws_node_id, NODE_ID_PATTERN)
+    except KeyError:
+        print("[WARN] ws schema has no $defs.NodeId.pattern (skipped)")
+
+    # node config schema (you said you added it)
+    node_cfg = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
+    if node_cfg.exists():
+        node_cfg_node_id = _get_jsonschema_prop_pattern(node_cfg, "node_id")
+        _check_pattern_equal("node.node_config.node_id", node_cfg_node_id, NODE_ID_PATTERN)
+    else:
+        print("[WARN] node config schema not found (skipped)")
+
+    # --- canonical sample checks ---
     snapshot_sample = "s-20260202-173012-4f2a9c10"
     _check_pattern_matches_sample("snapshot_id.v0.1", SNAPSHOT_ID_PATTERN, snapshot_sample)
+
+    node_sample = "cam-01"
+    _check_pattern_matches_sample("node_id.v0.1", NODE_ID_PATTERN, node_sample)
 
     data_root, subdir = _load_hub_config_constants()
     data_root = str(data_root).strip("/\\")
     subdir = str(subdir).strip("/\\")
-    image_sample = f"{data_root}/{subdir}/2026-02-02/cam-01/{snapshot_sample}.jpg"
+    image_sample = f"{data_root}/{subdir}/2026-02-02/{node_sample}/{snapshot_sample}.jpg"
     _check_pattern_matches_sample("image_path.v0.1", expected_image_path_pattern, image_sample)
 
 
@@ -265,7 +305,7 @@ def main():
         return 1
     spec = validate_openapi(openapi)
 
-    # --- JSON schema + examples ---
+    # --- Hub contracts: schema + examples ---
     ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
     ws_examples = ROOT / "hub" / "contracts" / "ws" / "examples"
     validate_jsonschema_examples(ws_schema, ws_examples)
@@ -278,7 +318,15 @@ def main():
     log_examples = ROOT / "hub" / "contracts" / "logging" / "examples"
     validate_jsonschema_examples(log_schema, log_examples)
 
-    # --- Extra scan: snapshot_id + image_path across all examples ---
+    # --- Node contracts (optional but you said it's added) ---
+    node_cfg_schema = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
+    node_cfg_examples = ROOT / "node" / "contracts" / "node" / "examples"
+    if node_cfg_schema.exists():
+        validate_jsonschema_examples(node_cfg_schema, node_cfg_examples)
+    else:
+        print("[WARN] node config schema missing (skipped):", node_cfg_schema)
+
+    # --- Extra scan: snapshot_id + image_path + node_id across all examples ---
     scan_examples_fields()
 
     # --- Cross-contract consistency checks (patterns must not drift) ---
