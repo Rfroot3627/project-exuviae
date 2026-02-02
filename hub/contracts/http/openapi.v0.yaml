@@ -1,0 +1,184 @@
+openapi: 3.0.3
+info:
+  title: Exuviae Hub API
+  version: "0.1.0"
+servers:
+  - url: http://localhost:8000
+
+paths:
+  /api/v0/nodes/register:
+    post:
+      summary: Register or update a node and its capabilities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NodeRegister"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /api/v0/nodes:
+    get:
+      summary: List registered nodes (v0.1 basic management)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeListResponse"
+
+  /api/v0/capture:
+    post:
+      summary: Request a snapshot capture from a node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaptureRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureResponse"
+
+  /api/v0/snapshots/upload:
+    post:
+      summary: Upload a snapshot image (multipart)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/SnapshotUploadForm"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /ws/v0:
+    get:
+      summary: WebSocket endpoint (upgrade)
+      description: >
+        WebSocket upgrade endpoint. Client should provide node_id as query string, e.g. /ws/v0?node_id=cam-01
+      responses:
+        "101":
+          description: Switching Protocols
+
+components:
+  schemas:
+    OkResponse:
+      type: object
+      required: [ok]
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+
+    NodeRegister:
+      type: object
+      required: [node_id, kind, firmware, capabilities]
+      additionalProperties: true
+      properties:
+        node_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$"
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 64
+        firmware:
+          type: string
+          minLength: 1
+          maxLength: 64
+        capabilities:
+          type: object
+          additionalProperties: true
+
+    NodeInfo:
+      type: object
+      required: [node_id, kind, firmware, capabilities]
+      additionalProperties: true
+      properties:
+        node_id:
+          type: string
+        kind:
+          type: string
+        firmware:
+          type: string
+        capabilities:
+          type: object
+          additionalProperties: true
+        last_seen_ts:
+          type: string
+
+    NodeListResponse:
+      type: object
+      required: [ok, nodes]
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeInfo"
+
+    CaptureRequest:
+      type: object
+      required: [node_id]
+      additionalProperties: true
+      properties:
+        node_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+
+    CaptureResponse:
+      type: object
+      required: [ok, snapshot_id]
+      additionalProperties: true
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        snapshot_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    SnapshotUploadForm:
+      type: object
+      required: [node_id, snapshot_id, image]
+      additionalProperties: true
+      properties:
+        node_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        snapshot_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        meta:
+          type: string
+          description: Optional JSON string metadata
+        image:
+          type: string
+          format: binary

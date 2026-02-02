@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "exuviae://contracts/logging/vision_log_line.schema.json",
+  "title": "VisionLogLine",
+  "type": "object",
+  "required": ["ts", "node_id", "snapshot_id", "image_path", "desc"],
+  "additionalProperties": true,
+  "properties": {
+    "ts": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "node_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$"
+    },
+    "snapshot_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "image_path": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "desc": { "type": "string", "minLength": 1, "maxLength": 4096 },
+
+    "model": { "type": "string", "maxLength": 128 },
+    "latency_ms": { "type": "integer", "minimum": 0, "maximum": 600000 },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 64 },
+      "maxItems": 32
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "node_id": "cam-01",
+  "kind": "node-runtime",
+  "firmware": "0.1.0",
+  "capabilities": {
+    "video_in": {
+      "modes": ["snapshot"],
+      "formats": ["jpeg"],
+      "resolutions": ["640x480"],
+      "fps_max": 1
+    }
+  }
+}
