@@ -65,30 +65,24 @@ def _load_hub_config_constants() -> tuple[str, str]:
     return (str(data_root), str(subdir))
 
 
-def _build_image_path_pattern_from_hub_config() -> str:
+def _build_image_path_prefix_from_hub_config() -> str:
     """
-    Build v0.1 image_path pattern string using hub config constants.
-    Layout:
-      {DATA_ROOT}/{SNAPSHOT_SUBDIR}/YYYY-MM-DD/<node_id>/<snapshot_id>.jpg
+    Build only the regex prefix for image_path using hub config constants.
 
-    Note: node_id & snapshot_id subpatterns are NOT hardcoded here.
-    We use structural regex + allow the same node_id/snapshot_id shapes as SSOT enforces elsewhere.
+    Returns a regex prefix that must appear at the start of SSOT image_path pattern:
+      ^{DATA_ROOT}/{SNAPSHOT_SUBDIR}/
+
+    This function intentionally does NOT encode node_id/snapshot_id subpatterns,
+    to avoid creating a second source of truth.
     """
     data_root, subdir = _load_hub_config_constants()
 
-    # Normalize (contracts/examples use forward slashes)
     data_root = data_root.strip("/\\")
     subdir = subdir.strip("/\\")
     dr = re.escape(data_root)
     sd = re.escape(subdir)
 
-    # Keep node_id/snapshot_id shapes aligned with SSOT by comparing final pattern string in consistency check.
-    # This function only builds the canonical expected pattern for image_path.
-    return (
-        rf"^{dr}/{sd}/[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}/"
-        rf"[a-zA-Z0-9][a-zA-Z0-9._-]{{0,63}}/"
-        rf"s-[0-9]{{8}}-[0-9]{{6}}-[0-9a-f]{{8}}\.jpg$"
-    )
+    return rf"^{dr}/{sd}/"
 
 
 # -----------------------------
@@ -298,9 +292,20 @@ def check_contract_consistency(spec: dict):
     ssot_snapshot_pat = ssot["properties"]["snapshot_id"]["pattern"]
     ssot_image_pat = ssot["properties"]["image_path"]["pattern"]
 
-    # Enforce SSOT image_path == hub config derived rule
-    expected_image_path_pattern = _build_image_path_pattern_from_hub_config()
-    _check_pattern_equal("ssot.image_path vs hub.config", ssot_image_pat, expected_image_path_pattern)
+    # Enforce SSOT image_path starts with hub-config-derived prefix (and ONLY SSOT defines the full pattern)
+    if not ssot_image_pat.endswith("$"):
+        print("[FAIL] ssot.image_path must end with '$' (full-match regex)")
+        print(f"  - ssot.image_path: {ssot_image_pat!r}")
+        raise SystemExit(1)
+    print("[OK]   ssot.image_path is full-match regex")
+
+    expected_prefix = _build_image_path_prefix_from_hub_config()
+    if not ssot_image_pat.startswith(expected_prefix):
+        print("[FAIL] ssot.image_path must start with hub config prefix")
+        print(f"  - ssot.image_path: {ssot_image_pat!r}")
+        print(f"  - expected_prefix: {expected_prefix!r}")
+        raise SystemExit(1)
+    print("[OK]   ssot.image_path has hub-config prefix")
 
     # OpenAPI components must match SSOT
     _check_pattern_equal("openapi.components.NodeId", _get_openapi_component_pattern(spec, "NodeId"), ssot_node_pat)
