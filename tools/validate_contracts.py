@@ -14,14 +14,10 @@ from openapi_spec_validator import validate_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# v0.1 canonical patterns (SSOT for snapshot_id/node_id formats)
-SNAPSHOT_ID_PATTERN = r"^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
-NODE_ID_PATTERN = r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$"
 
-SNAPSHOT_ID_RE = re.compile(SNAPSHOT_ID_PATTERN)
-NODE_ID_RE = re.compile(NODE_ID_PATTERN)
-
-
+# -----------------------------
+# Basic loaders
+# -----------------------------
 def load_json(p: Path):
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -35,8 +31,8 @@ def load_yaml(p: Path):
 
 def load_ssot_patterns() -> dict:
     """
-    Load SSOT patterns for v0.1.
-    This file is human-facing SSOT; tools enforce that all contracts match it.
+    Human-facing SSOT patterns for v0.1.
+    Tools enforce all contracts match this file.
     """
     p = ROOT / "hub" / "contracts" / "_ssot" / "patterns.v0.1.json"
     if not p.exists():
@@ -69,11 +65,14 @@ def _load_hub_config_constants() -> tuple[str, str]:
     return (str(data_root), str(subdir))
 
 
-def _build_image_path_pattern() -> str:
+def _build_image_path_pattern_from_hub_config() -> str:
     """
     Build v0.1 image_path pattern string using hub config constants.
-    Expected layout:
+    Layout:
       {DATA_ROOT}/{SNAPSHOT_SUBDIR}/YYYY-MM-DD/<node_id>/<snapshot_id>.jpg
+
+    Note: node_id & snapshot_id subpatterns are NOT hardcoded here.
+    We use structural regex + allow the same node_id/snapshot_id shapes as SSOT enforces elsewhere.
     """
     data_root, subdir = _load_hub_config_constants()
 
@@ -83,15 +82,13 @@ def _build_image_path_pattern() -> str:
     dr = re.escape(data_root)
     sd = re.escape(subdir)
 
+    # Keep node_id/snapshot_id shapes aligned with SSOT by comparing final pattern string in consistency check.
+    # This function only builds the canonical expected pattern for image_path.
     return (
         rf"^{dr}/{sd}/[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}/"
         rf"[a-zA-Z0-9][a-zA-Z0-9._-]{{0,63}}/"
         rf"s-[0-9]{{8}}-[0-9]{{6}}-[0-9a-f]{{8}}\.jpg$"
     )
-
-
-def _build_image_path_re() -> re.Pattern[str]:
-    return re.compile(_build_image_path_pattern())
 
 
 # -----------------------------
@@ -132,7 +129,7 @@ def validate_openapi(openapi_path: Path) -> dict:
 
 
 # -----------------------------
-# Scanners for examples
+# Helpers: traverse/scan JSON
 # -----------------------------
 def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> Iterable[Tuple[Tuple[str, ...], str]]:
     if isinstance(obj, dict):
@@ -144,16 +141,15 @@ def iter_field_values(obj: Any, field_name: str, path: Tuple[str, ...] = ()) -> 
                 yield from iter_field_values(v, field_name, new_path)
     elif isinstance(obj, list):
         for i, v in enumerate(obj):
-            new_path = path + (f"[{i}]",)
-            yield from iter_field_values(v, field_name, new_path)
+            yield from iter_field_values(v, field_name, path + (f"[{i}]",))
 
 
 def scan_examples_fields():
     """
     Scan all example JSON files under hub/node contracts examples and ensure:
-    - snapshot_id matches v0.1
-    - image_path matches v0.1 (dynamic from hub config)
-    - node_id matches v0.1 (if present in examples)
+    - snapshot_id matches SSOT
+    - node_id matches SSOT (if present)
+    - image_path matches SSOT (if present)
     """
     example_roots = [
         ROOT / "hub" / "contracts",
@@ -192,19 +188,18 @@ def scan_examples_fields():
             if not snapshot_id_re.match(sval):
                 failures.append((p, spath, f"snapshot_id {sval!r} does not match {ssot_snapshot_pat!r}"))
 
-        for ipath, ival in iter_field_values(data, "image_path"):
-            if not image_path_re.match(ival):
-                failures.append((p, ipath, f"image_path {ival!r} does not match {ssot_image_pat!r}"))
-
         for npath, nval in iter_field_values(data, "node_id"):
             if not node_id_re.match(nval):
                 failures.append((p, npath, f"node_id {nval!r} does not match {ssot_node_pat!r}"))
 
+        for ipath, ival in iter_field_values(data, "image_path"):
+            if not image_path_re.match(ival):
+                failures.append((p, ipath, f"image_path {ival!r} does not match {ssot_image_pat!r}"))
+
     if failures:
         print("[FAIL] examples field scan failed:")
         for p, jpath, msg in failures:
-            path_str = "/".join(jpath)
-            print(f"  - {p}: {path_str}: {msg}")
+            print(f"  - {p}: {'/'.join(jpath)}: {msg}")
         raise SystemExit(1)
 
     print(f"[OK]   examples scan passed ({len(json_files)} files scanned)")
@@ -213,28 +208,12 @@ def scan_examples_fields():
 # -----------------------------
 # Contract consistency checks
 # -----------------------------
-def _require_openapi_prop_ref(spec: dict, parent_schema: str, prop_name: str, expected_ref: str):
-    try:
-        prop = spec["components"]["schemas"][parent_schema]["properties"][prop_name]
-    except Exception as e:
-        raise KeyError(f"OpenAPI missing components.schemas.{parent_schema}.properties.{prop_name}") from e
-
-    if not (isinstance(prop, dict) and prop.get("$ref") == expected_ref and len(prop) == 1):
-        print("[FAIL] OpenAPI property must be $ref-only:")
-        print(f"  - schema: {parent_schema}")
-        print(f"  - prop  : {prop_name}")
-        print(f"  - got   : {prop!r}")
-        print(f"  - want  : {{'$ref': {expected_ref!r}}}")
-        raise SystemExit(1)
-
-    print(f"[OK]   openapi $ref-only: {parent_schema}.{prop_name}")
-
-
 def _get_openapi_component_pattern(spec: dict, schema_name: str) -> str:
     try:
         return spec["components"]["schemas"][schema_name]["pattern"]
     except Exception as e:
         raise KeyError(f"OpenAPI missing components.schemas.{schema_name}.pattern") from e
+
 
 def _get_jsonschema_defs_pattern(schema_path: Path, defs_key: str) -> str:
     schema = load_json(schema_path)
@@ -270,111 +249,21 @@ def _check_pattern_matches_sample(name: str, pattern: str, sample: str):
     print(f"[OK]   pattern matches sample: {name}")
 
 
-def check_contract_consistency(spec: dict):
-    ssot = load_ssot_patterns()
-    ssot_node_pat = ssot["properties"]["node_id"]["pattern"]
-    ssot_snapshot_pat = ssot["properties"]["snapshot_id"]["pattern"]
-    ssot_image_pat = ssot["properties"]["image_path"]["pattern"]
-
-    # image_path must also match hub config-derived rule
-    expected_image_path_pattern = _build_image_path_pattern()
-    _check_pattern_equal("ssot.image_path vs hub.config", ssot_image_pat, expected_image_path_pattern)
-
-    # --- OpenAPI components are the public API SSOT; must match human SSOT ---
-    openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
-    _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, ssot_snapshot_pat)
-
-    openapi_node_pat = _get_openapi_component_pattern(spec, "NodeId")
-    _check_pattern_equal("openapi.components.NodeId", openapi_node_pat, ssot_node_pat)
-
-    openapi_image_pat = _get_openapi_component_pattern(spec, "ImagePath")
-    _check_pattern_equal("openapi.components.ImagePath", openapi_image_pat, ssot_image_pat)
-
-    # --- WS defs must match SSOT ---
-    ws_schema_path = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
-    ws_snapshot = _get_jsonschema_defs_pattern(ws_schema_path, "SnapshotId")
-    _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot, ssot_snapshot_pat)
-
-    ws_node = _get_jsonschema_defs_pattern(ws_schema_path, "NodeId")
-    _check_pattern_equal("ws.$defs.NodeId", ws_node, ssot_node_pat)
-
-    ws_img = _get_jsonschema_defs_pattern(ws_schema_path, "ImagePath")
-    _check_pattern_equal("ws.$defs.ImagePath", ws_img, ssot_image_pat)
-
-    # --- Logging defs must match SSOT ---
-    log_schema_path = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
-    log_snapshot = _get_jsonschema_defs_pattern(log_schema_path, "SnapshotId")
-    _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot, ssot_snapshot_pat)
-
-    log_node = _get_jsonschema_defs_pattern(log_schema_path, "NodeId")
-    _check_pattern_equal("logging.$defs.NodeId", log_node, ssot_node_pat)
-
-    log_img = _get_jsonschema_defs_pattern(log_schema_path, "ImagePath")
-    _check_pattern_equal("logging.$defs.ImagePath", log_img, ssot_image_pat)
-
-    # --- Node config schema node_id must match SSOT ---
-    node_cfg = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
-    if not node_cfg.exists():
-        print("[FAIL] node config schema missing:", node_cfg)
-        raise SystemExit(1)
-
-    node_cfg_node_id = _get_jsonschema_prop_pattern(node_cfg, "node_id")
-    _check_pattern_equal("node.node_config.node_id", node_cfg_node_id, ssot_node_pat)
-
-    # --- Enforce $ref-only usage (WS / logging) ---
-    ws = load_json(ws_schema_path)
-    _scan_require_ref_for_field(ws, "node_id", "#/$defs/NodeId")
-    _scan_require_ref_for_field(ws, "snapshot_id", "#/$defs/SnapshotId")
-    _scan_require_ref_for_field(ws, "image_path", "#/$defs/ImagePath")
-
-    log = load_json(log_schema_path)
-    _scan_require_ref_for_field(log, "node_id", "#/$defs/NodeId")
-    _scan_require_ref_for_field(log, "snapshot_id", "#/$defs/SnapshotId")
-    _scan_require_ref_for_field(log, "image_path", "#/$defs/ImagePath")
-
-    # --- Enforce $ref-only usage (OpenAPI key properties) ---
-    _require_openapi_prop_ref(spec, "CaptureResponse", "snapshot_id", "#/components/schemas/SnapshotId")
-    _require_openapi_prop_ref(spec, "SnapshotUploadResponse", "image_path", "#/components/schemas/ImagePath")
-
-    # --- canonical sample checks ---
-    snapshot_sample = "s-20260202-173012-4f2a9c10"
-    _check_pattern_matches_sample("snapshot_id.v0.1", ssot_snapshot_pat, snapshot_sample)
-
-    node_sample = "cam-01"
-    _check_pattern_matches_sample("node_id.v0.1", ssot_node_pat, node_sample)
-
-    data_root, subdir = _load_hub_config_constants()
-    data_root = str(data_root).strip("/\\")
-    subdir = str(subdir).strip("/\\")
-    image_sample = f"{data_root}/{subdir}/2026-02-02/{node_sample}/{snapshot_sample}.jpg"
-    _check_pattern_matches_sample("image_path.v0.1", ssot_image_pat, image_sample)
-
-
-
-
 def _scan_require_ref_for_field(schema_obj: Any, field_name: str, expected_ref: str, in_defs: bool = False, path: Tuple[str, ...] = ()):
     """
     Traverse JSON schema object and ensure that any occurrence of a property named field_name
-    (outside of $defs) is a dict that equals {"$ref": expected_ref} (allowing extra keys is NOT allowed).
+    (outside of $defs) is a dict that equals {"$ref": expected_ref}.
     """
     if isinstance(schema_obj, dict):
-        # Track whether we're inside $defs
-        if "$defs" in schema_obj:
-            # Still traverse others; $defs itself should be excluded from enforcement
-            pass
-
         for k, v in schema_obj.items():
             new_in_defs = in_defs or (k == "$defs")
             new_path = path + (str(k),)
 
-            # Enforce only when not in $defs and this is a properties dict entry
             if (not new_in_defs) and k == field_name and isinstance(v, dict):
-                # Must be exactly {"$ref": expected_ref}
                 if not (len(v) == 1 and v.get("$ref") == expected_ref):
-                    p = "/".join(new_path)
                     print("[FAIL] field must be $ref-only:")
                     print(f"  - field: {field_name}")
-                    print(f"  - path : {p}")
+                    print(f"  - path : {'/'.join(new_path)}")
                     print(f"  - got  : {v!r}")
                     print(f"  - want : {{'$ref': {expected_ref!r}}}")
                     raise SystemExit(1)
@@ -386,18 +275,97 @@ def _scan_require_ref_for_field(schema_obj: Any, field_name: str, expected_ref: 
             _scan_require_ref_for_field(item, field_name, expected_ref, in_defs, path + (f"[{i}]",))
 
 
+def _require_openapi_prop_ref(spec: dict, parent_schema: str, prop_name: str, expected_ref: str):
+    try:
+        prop = spec["components"]["schemas"][parent_schema]["properties"][prop_name]
+    except Exception as e:
+        raise KeyError(f"OpenAPI missing components.schemas.{parent_schema}.properties.{prop_name}") from e
+
+    if not (isinstance(prop, dict) and prop.get("$ref") == expected_ref and len(prop) == 1):
+        print("[FAIL] OpenAPI property must be $ref-only:")
+        print(f"  - schema: {parent_schema}")
+        print(f"  - prop  : {prop_name}")
+        print(f"  - got   : {prop!r}")
+        print(f"  - want  : {{'$ref': {expected_ref!r}}}")
+        raise SystemExit(1)
+
+    print(f"[OK]   openapi $ref-only: {parent_schema}.{prop_name}")
+
+
+def check_contract_consistency(spec: dict):
+    ssot = load_ssot_patterns()
+    ssot_node_pat = ssot["properties"]["node_id"]["pattern"]
+    ssot_snapshot_pat = ssot["properties"]["snapshot_id"]["pattern"]
+    ssot_image_pat = ssot["properties"]["image_path"]["pattern"]
+
+    # Enforce SSOT image_path == hub config derived rule
+    expected_image_path_pattern = _build_image_path_pattern_from_hub_config()
+    _check_pattern_equal("ssot.image_path vs hub.config", ssot_image_pat, expected_image_path_pattern)
+
+    # OpenAPI components must match SSOT
+    _check_pattern_equal("openapi.components.NodeId", _get_openapi_component_pattern(spec, "NodeId"), ssot_node_pat)
+    _check_pattern_equal("openapi.components.SnapshotId", _get_openapi_component_pattern(spec, "SnapshotId"), ssot_snapshot_pat)
+    _check_pattern_equal("openapi.components.ImagePath", _get_openapi_component_pattern(spec, "ImagePath"), ssot_image_pat)
+
+    # WS defs must match SSOT
+    ws_schema_path = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
+    _check_pattern_equal("ws.$defs.NodeId", _get_jsonschema_defs_pattern(ws_schema_path, "NodeId"), ssot_node_pat)
+    _check_pattern_equal("ws.$defs.SnapshotId", _get_jsonschema_defs_pattern(ws_schema_path, "SnapshotId"), ssot_snapshot_pat)
+    _check_pattern_equal("ws.$defs.ImagePath", _get_jsonschema_defs_pattern(ws_schema_path, "ImagePath"), ssot_image_pat)
+
+    # logging defs must match SSOT
+    log_schema_path = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
+    _check_pattern_equal("logging.$defs.NodeId", _get_jsonschema_defs_pattern(log_schema_path, "NodeId"), ssot_node_pat)
+    _check_pattern_equal("logging.$defs.SnapshotId", _get_jsonschema_defs_pattern(log_schema_path, "SnapshotId"), ssot_snapshot_pat)
+    _check_pattern_equal("logging.$defs.ImagePath", _get_jsonschema_defs_pattern(log_schema_path, "ImagePath"), ssot_image_pat)
+
+    # node config schema node_id must match SSOT
+    node_cfg = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
+    if not node_cfg.exists():
+        print("[FAIL] node config schema missing:", node_cfg)
+        raise SystemExit(1)
+    _check_pattern_equal("node.node_config.node_id", _get_jsonschema_prop_pattern(node_cfg, "node_id"), ssot_node_pat)
+
+    # Enforce $ref-only usage (WS / logging)
+    ws = load_json(ws_schema_path)
+    _scan_require_ref_for_field(ws, "node_id", "#/$defs/NodeId")
+    _scan_require_ref_for_field(ws, "snapshot_id", "#/$defs/SnapshotId")
+    _scan_require_ref_for_field(ws, "image_path", "#/$defs/ImagePath")
+
+    log = load_json(log_schema_path)
+    _scan_require_ref_for_field(log, "node_id", "#/$defs/NodeId")
+    _scan_require_ref_for_field(log, "snapshot_id", "#/$defs/SnapshotId")
+    _scan_require_ref_for_field(log, "image_path", "#/$defs/ImagePath")
+
+    # Enforce $ref-only usage (OpenAPI key properties)
+    _require_openapi_prop_ref(spec, "CaptureResponse", "snapshot_id", "#/components/schemas/SnapshotId")
+    _require_openapi_prop_ref(spec, "SnapshotUploadResponse", "image_path", "#/components/schemas/ImagePath")
+
+    # Canonical sample checks (still use SSOT)
+    snapshot_sample = "s-20260202-173012-4f2a9c10"
+    node_sample = "cam-01"
+    data_root, subdir = _load_hub_config_constants()
+    data_root = str(data_root).strip("/\\")
+    subdir = str(subdir).strip("/\\")
+    image_sample = f"{data_root}/{subdir}/2026-02-02/{node_sample}/{snapshot_sample}.jpg"
+
+    _check_pattern_matches_sample("snapshot_id.v0.1", ssot_snapshot_pat, snapshot_sample)
+    _check_pattern_matches_sample("node_id.v0.1", ssot_node_pat, node_sample)
+    _check_pattern_matches_sample("image_path.v0.1", ssot_image_pat, image_sample)
+
+
 # -----------------------------
 # Main
 # -----------------------------
 def main():
-    # --- OpenAPI ---
+    # OpenAPI
     openapi = ROOT / "hub" / "contracts" / "http" / "openapi.v0.yaml"
     if not openapi.exists():
         print(f"[FAIL] missing: {openapi}")
         return 1
     spec = validate_openapi(openapi)
 
-    # --- Hub contracts: schema + examples ---
+    # Hub contracts: schema + examples
     ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
     ws_examples = ROOT / "hub" / "contracts" / "ws" / "examples"
     validate_jsonschema_examples(ws_schema, ws_examples)
@@ -410,18 +378,19 @@ def main():
     log_examples = ROOT / "hub" / "contracts" / "logging" / "examples"
     validate_jsonschema_examples(log_schema, log_examples)
 
-    # --- Node contracts (optional but you said it's added) ---
+    # Node contracts
     node_cfg_schema = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
     node_cfg_examples = ROOT / "node" / "contracts" / "node" / "examples"
     if node_cfg_schema.exists():
         validate_jsonschema_examples(node_cfg_schema, node_cfg_examples)
     else:
-        print("[WARN] node config schema missing (skipped):", node_cfg_schema)
+        print("[FAIL] node config schema missing:", node_cfg_schema)
+        return 1
 
-    # --- Extra scan: snapshot_id + image_path + node_id across all examples ---
+    # Extra scan: snapshot_id/node_id/image_path across all examples (SSOT-based)
     scan_examples_fields()
 
-    # --- Cross-contract consistency checks (patterns must not drift) ---
+    # Cross-contract consistency checks (SSOT-based + $ref-only)
     check_contract_consistency(spec)
 
     print("\nAll contracts OK.")
