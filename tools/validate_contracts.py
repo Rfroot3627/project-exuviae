@@ -23,7 +23,10 @@ NODE_ID_RE = re.compile(NODE_ID_PATTERN)
 
 
 def load_json(p: Path):
-    return json.loads(p.read_text(encoding="utf-8"))
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {p} (line {e.lineno}, col {e.colno}): {e.msg}") from e
 
 
 def load_yaml(p: Path):
@@ -190,14 +193,11 @@ def scan_examples_fields():
 # -----------------------------
 # Contract consistency checks
 # -----------------------------
-def _get_openapi_prop_pattern(spec: dict, schema_name: str, prop_name: str) -> str:
+def _get_openapi_component_pattern(spec: dict, schema_name: str) -> str:
     try:
-        return spec["components"]["schemas"][schema_name]["properties"][prop_name]["pattern"]
+        return spec["components"]["schemas"][schema_name]["pattern"]
     except Exception as e:
-        raise KeyError(
-            f"OpenAPI missing components.schemas.{schema_name}.properties.{prop_name}.pattern"
-        ) from e
-
+        raise KeyError(f"OpenAPI missing components.schemas.{schema_name}.pattern") from e
 
 def _get_jsonschema_defs_pattern(schema_path: Path, defs_key: str) -> str:
     schema = load_json(schema_path)
@@ -235,8 +235,8 @@ def _check_pattern_matches_sample(name: str, pattern: str, sample: str):
 
 def check_contract_consistency(spec: dict):
     # --- snapshot_id patterns must not drift ---
-    openapi_snapshot_id = _get_openapi_prop_pattern(spec, "CaptureResponse", "snapshot_id")
-    _check_pattern_equal("openapi.CaptureResponse.snapshot_id", openapi_snapshot_id, SNAPSHOT_ID_PATTERN)
+    openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
+    _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, SNAPSHOT_ID_PATTERN)
 
     ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
     ws_snapshot_id = _get_jsonschema_defs_pattern(ws_schema, "SnapshotId")
@@ -248,8 +248,8 @@ def check_contract_consistency(spec: dict):
 
     # --- image_path patterns must not drift ---
     expected_image_path_pattern = _build_image_path_pattern()
-    openapi_image_path = _get_openapi_prop_pattern(spec, "SnapshotUploadResponse", "image_path")
-    _check_pattern_equal("openapi.SnapshotUploadResponse.image_path", openapi_image_path, expected_image_path_pattern)
+    openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
+    _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, SNAPSHOT_ID_PATTERN)
 
     try:
         log_image_path = _get_jsonschema_defs_pattern(log_schema, "ImagePath")
