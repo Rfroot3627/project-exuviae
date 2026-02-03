@@ -193,6 +193,23 @@ def scan_examples_fields():
 # -----------------------------
 # Contract consistency checks
 # -----------------------------
+def _require_openapi_prop_ref(spec: dict, parent_schema: str, prop_name: str, expected_ref: str):
+    try:
+        prop = spec["components"]["schemas"][parent_schema]["properties"][prop_name]
+    except Exception as e:
+        raise KeyError(f"OpenAPI missing components.schemas.{parent_schema}.properties.{prop_name}") from e
+
+    if not (isinstance(prop, dict) and prop.get("$ref") == expected_ref and len(prop) == 1):
+        print("[FAIL] OpenAPI property must be $ref-only:")
+        print(f"  - schema: {parent_schema}")
+        print(f"  - prop  : {prop_name}")
+        print(f"  - got   : {prop!r}")
+        print(f"  - want  : {{'$ref': {expected_ref!r}}}")
+        raise SystemExit(1)
+
+    print(f"[OK]   openapi $ref-only: {parent_schema}.{prop_name}")
+
+
 def _get_openapi_component_pattern(spec: dict, schema_name: str) -> str:
     try:
         return spec["components"]["schemas"][schema_name]["pattern"]
@@ -234,51 +251,84 @@ def _check_pattern_matches_sample(name: str, pattern: str, sample: str):
 
 
 def check_contract_consistency(spec: dict):
-    # --- snapshot_id patterns must not drift ---
+    # --- SSOT patterns ---
+    # snapshot_id SSOT is OpenAPI components/SnapshotId
     openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
     _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, SNAPSHOT_ID_PATTERN)
 
-    ws_schema = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
-    ws_snapshot_id = _get_jsonschema_defs_pattern(ws_schema, "SnapshotId")
-    _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot_id, SNAPSHOT_ID_PATTERN)
+    # node_id SSOT is OpenAPI components/NodeId
+    openapi_node_pat = _get_openapi_component_pattern(spec, "NodeId")
+    _check_pattern_equal("openapi.components.NodeId", openapi_node_pat, NODE_ID_PATTERN)
 
-    log_schema = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
-    log_snapshot_id = _get_jsonschema_defs_pattern(log_schema, "SnapshotId")
-    _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot_id, SNAPSHOT_ID_PATTERN)
-
-    # --- image_path patterns must not drift ---
+    # image_path SSOT expected is generated from hub config
     expected_image_path_pattern = _build_image_path_pattern()
-    openapi_image_path_pat = _get_openapi_component_pattern(spec, "ImagePath")
-    _check_pattern_equal("openapi.components.ImagePath", openapi_image_path_pat, expected_image_path_pattern)
+    openapi_image_pat = _get_openapi_component_pattern(spec, "ImagePath")
+    _check_pattern_equal("openapi.components.ImagePath", openapi_image_pat, expected_image_path_pattern)
+
+    # --- WS defs patterns must match SSOT ---
+    ws_schema_path = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
+    ws_snapshot = _get_jsonschema_defs_pattern(ws_schema_path, "SnapshotId")
+    _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot, SNAPSHOT_ID_PATTERN)
+
+    ws_node = _get_jsonschema_defs_pattern(ws_schema_path, "NodeId")
+    _check_pattern_equal("ws.$defs.NodeId", ws_node, NODE_ID_PATTERN)
 
     try:
-        log_image_path = _get_jsonschema_defs_pattern(log_schema, "ImagePath")
-        _check_pattern_equal("logging.$defs.ImagePath", log_image_path, expected_image_path_pattern)
+        ws_img = _get_jsonschema_defs_pattern(ws_schema_path, "ImagePath")
+        _check_pattern_equal("ws.$defs.ImagePath", ws_img, expected_image_path_pattern)
     except KeyError:
-        print("[WARN] logging schema has no $defs.ImagePath.pattern (skipped)")
+        print("[WARN] ws schema has no $defs.ImagePath.pattern (skipped)")
 
-    # --- node_id patterns must not drift ---
-    cap_schema = ROOT / "hub" / "contracts" / "capabilities" / "node_register.schema.json"
-    cap_node_id = _get_jsonschema_prop_pattern(cap_schema, "node_id")
-    _check_pattern_equal("capabilities.node_id", cap_node_id, NODE_ID_PATTERN)
+    # --- Logging defs patterns must match SSOT ---
+    log_schema_path = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
+    log_snapshot = _get_jsonschema_defs_pattern(log_schema_path, "SnapshotId")
+    _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot, SNAPSHOT_ID_PATTERN)
 
-    log_node_id = _get_jsonschema_defs_pattern(log_schema, "NodeId")
-    _check_pattern_equal("logging.$defs.NodeId", log_node_id, NODE_ID_PATTERN)
-
-    # WS may or may not define NodeId; if present, enforce
     try:
-        ws_node_id = _get_jsonschema_defs_pattern(ws_schema, "NodeId")
-        _check_pattern_equal("ws.$defs.NodeId", ws_node_id, NODE_ID_PATTERN)
+        log_node = _get_jsonschema_defs_pattern(log_schema_path, "NodeId")
+        _check_pattern_equal("logging.$defs.NodeId", log_node, NODE_ID_PATTERN)
     except KeyError:
-        print("[WARN] ws schema has no $defs.NodeId.pattern (skipped)")
+        # fallback: some schemas keep node_id pattern inline; but we want $defs now
+        print("[FAIL] logging schema must define $defs.NodeId.pattern")
+        raise SystemExit(1)
 
-    # node config schema (you said you added it)
+    try:
+        log_img = _get_jsonschema_defs_pattern(log_schema_path, "ImagePath")
+        _check_pattern_equal("logging.$defs.ImagePath", log_img, expected_image_path_pattern)
+    except KeyError:
+        print("[FAIL] logging schema must define $defs.ImagePath.pattern")
+        raise SystemExit(1)
+
+    # --- Node config schema node_id pattern must match SSOT ---
     node_cfg = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
     if node_cfg.exists():
         node_cfg_node_id = _get_jsonschema_prop_pattern(node_cfg, "node_id")
         _check_pattern_equal("node.node_config.node_id", node_cfg_node_id, NODE_ID_PATTERN)
     else:
-        print("[WARN] node config schema not found (skipped)")
+        print("[FAIL] node config schema missing:", node_cfg)
+        raise SystemExit(1)
+
+    # --- Enforce $ref-only usage (WS / logging) ---
+    ws = load_json(ws_schema_path)
+    _scan_require_ref_for_field(ws, "node_id", "#/$defs/NodeId")
+    _scan_require_ref_for_field(ws, "snapshot_id", "#/$defs/SnapshotId")
+    # Only enforce if you actually use image_path in WS messages; if not used, scan is harmless.
+    # It will only fail if an image_path property exists and isn't $ref-only.
+    _scan_require_ref_for_field(ws, "image_path", "#/$defs/ImagePath")
+
+    log = load_json(log_schema_path)
+    _scan_require_ref_for_field(log, "node_id", "#/$defs/NodeId")
+    _scan_require_ref_for_field(log, "snapshot_id", "#/$defs/SnapshotId")
+    _scan_require_ref_for_field(log, "image_path", "#/$defs/ImagePath")
+
+    # --- Enforce $ref-only usage (OpenAPI key properties) ---
+    # Ensure the places you care about are using $ref and not inline patterns.
+    _require_openapi_prop_ref(spec, "CaptureResponse", "snapshot_id", "#/components/schemas/SnapshotId")
+    _require_openapi_prop_ref(spec, "SnapshotUploadResponse", "image_path", "#/components/schemas/ImagePath")
+
+    # If your OpenAPI has any schema with node_id, add checks here.
+    # Example (uncomment and adjust when you add node_id into OpenAPI):
+    # _require_openapi_prop_ref(spec, "NodeRegisterRequest", "node_id", "#/components/schemas/NodeId")
 
     # --- canonical sample checks ---
     snapshot_sample = "s-20260202-173012-4f2a9c10"
@@ -292,6 +342,41 @@ def check_contract_consistency(spec: dict):
     subdir = str(subdir).strip("/\\")
     image_sample = f"{data_root}/{subdir}/2026-02-02/{node_sample}/{snapshot_sample}.jpg"
     _check_pattern_matches_sample("image_path.v0.1", expected_image_path_pattern, image_sample)
+
+
+
+def _scan_require_ref_for_field(schema_obj: Any, field_name: str, expected_ref: str, in_defs: bool = False, path: Tuple[str, ...] = ()):
+    """
+    Traverse JSON schema object and ensure that any occurrence of a property named field_name
+    (outside of $defs) is a dict that equals {"$ref": expected_ref} (allowing extra keys is NOT allowed).
+    """
+    if isinstance(schema_obj, dict):
+        # Track whether we're inside $defs
+        if "$defs" in schema_obj:
+            # Still traverse others; $defs itself should be excluded from enforcement
+            pass
+
+        for k, v in schema_obj.items():
+            new_in_defs = in_defs or (k == "$defs")
+            new_path = path + (str(k),)
+
+            # Enforce only when not in $defs and this is a properties dict entry
+            if (not new_in_defs) and k == field_name and isinstance(v, dict):
+                # Must be exactly {"$ref": expected_ref}
+                if not (len(v) == 1 and v.get("$ref") == expected_ref):
+                    p = "/".join(new_path)
+                    print("[FAIL] field must be $ref-only:")
+                    print(f"  - field: {field_name}")
+                    print(f"  - path : {p}")
+                    print(f"  - got  : {v!r}")
+                    print(f"  - want : {{'$ref': {expected_ref!r}}}")
+                    raise SystemExit(1)
+
+            _scan_require_ref_for_field(v, field_name, expected_ref, new_in_defs, new_path)
+
+    elif isinstance(schema_obj, list):
+        for i, item in enumerate(schema_obj):
+            _scan_require_ref_for_field(item, field_name, expected_ref, in_defs, path + (f"[{i}]",))
 
 
 # -----------------------------
