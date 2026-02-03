@@ -170,7 +170,15 @@ def scan_examples_fields():
         print("[WARN] no example json files found under hub/node contracts examples")
         return
 
-    image_path_re = _build_image_path_re()
+    ssot = load_ssot_patterns()
+    ssot_node_pat = ssot["properties"]["node_id"]["pattern"]
+    ssot_snapshot_pat = ssot["properties"]["snapshot_id"]["pattern"]
+    ssot_image_pat = ssot["properties"]["image_path"]["pattern"]
+
+    node_id_re = re.compile(ssot_node_pat)
+    snapshot_id_re = re.compile(ssot_snapshot_pat)
+    image_path_re = re.compile(ssot_image_pat)
+
     failures = []
 
     for p in json_files:
@@ -181,16 +189,16 @@ def scan_examples_fields():
             continue
 
         for spath, sval in iter_field_values(data, "snapshot_id"):
-            if not SNAPSHOT_ID_RE.match(sval):
-                failures.append((p, spath, f"snapshot_id {sval!r} does not match {SNAPSHOT_ID_PATTERN!r}"))
+            if not snapshot_id_re.match(sval):
+                failures.append((p, spath, f"snapshot_id {sval!r} does not match {ssot_snapshot_pat!r}"))
 
         for ipath, ival in iter_field_values(data, "image_path"):
             if not image_path_re.match(ival):
-                failures.append((p, ipath, f"image_path {ival!r} does not match {image_path_re.pattern!r}"))
+                failures.append((p, ipath, f"image_path {ival!r} does not match {ssot_image_pat!r}"))
 
         for npath, nval in iter_field_values(data, "node_id"):
-            if not NODE_ID_RE.match(nval):
-                failures.append((p, npath, f"node_id {nval!r} does not match {NODE_ID_PATTERN!r}"))
+            if not node_id_re.match(nval):
+                failures.append((p, npath, f"node_id {nval!r} does not match {ssot_node_pat!r}"))
 
     if failures:
         print("[FAIL] examples field scan failed:")
