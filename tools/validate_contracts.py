@@ -33,6 +33,18 @@ def load_yaml(p: Path):
     return yaml.safe_load(p.read_text(encoding="utf-8"))
 
 
+def load_ssot_patterns() -> dict:
+    """
+    Load SSOT patterns for v0.1.
+    This file is human-facing SSOT; tools enforce that all contracts match it.
+    """
+    p = ROOT / "hub" / "contracts" / "_ssot" / "patterns.v0.1.json"
+    if not p.exists():
+        print(f"[FAIL] SSOT patterns missing: {p}")
+        raise SystemExit(1)
+    return load_json(p)
+
+
 # -----------------------------
 # Dynamic rule: image_path from hub config constants
 # -----------------------------
@@ -251,69 +263,60 @@ def _check_pattern_matches_sample(name: str, pattern: str, sample: str):
 
 
 def check_contract_consistency(spec: dict):
-    # --- SSOT patterns ---
-    # snapshot_id SSOT is OpenAPI components/SnapshotId
-    openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
-    _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, SNAPSHOT_ID_PATTERN)
+    ssot = load_ssot_patterns()
+    ssot_node_pat = ssot["properties"]["node_id"]["pattern"]
+    ssot_snapshot_pat = ssot["properties"]["snapshot_id"]["pattern"]
+    ssot_image_pat = ssot["properties"]["image_path"]["pattern"]
 
-    # node_id SSOT is OpenAPI components/NodeId
-    openapi_node_pat = _get_openapi_component_pattern(spec, "NodeId")
-    _check_pattern_equal("openapi.components.NodeId", openapi_node_pat, NODE_ID_PATTERN)
-
-    # image_path SSOT expected is generated from hub config
+    # image_path must also match hub config-derived rule
     expected_image_path_pattern = _build_image_path_pattern()
-    openapi_image_pat = _get_openapi_component_pattern(spec, "ImagePath")
-    _check_pattern_equal("openapi.components.ImagePath", openapi_image_pat, expected_image_path_pattern)
+    _check_pattern_equal("ssot.image_path vs hub.config", ssot_image_pat, expected_image_path_pattern)
 
-    # --- WS defs patterns must match SSOT ---
+    # --- OpenAPI components are the public API SSOT; must match human SSOT ---
+    openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
+    _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, ssot_snapshot_pat)
+
+    openapi_node_pat = _get_openapi_component_pattern(spec, "NodeId")
+    _check_pattern_equal("openapi.components.NodeId", openapi_node_pat, ssot_node_pat)
+
+    openapi_image_pat = _get_openapi_component_pattern(spec, "ImagePath")
+    _check_pattern_equal("openapi.components.ImagePath", openapi_image_pat, ssot_image_pat)
+
+    # --- WS defs must match SSOT ---
     ws_schema_path = ROOT / "hub" / "contracts" / "ws" / "messages.schema.json"
     ws_snapshot = _get_jsonschema_defs_pattern(ws_schema_path, "SnapshotId")
-    _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot, SNAPSHOT_ID_PATTERN)
+    _check_pattern_equal("ws.$defs.SnapshotId", ws_snapshot, ssot_snapshot_pat)
 
     ws_node = _get_jsonschema_defs_pattern(ws_schema_path, "NodeId")
-    _check_pattern_equal("ws.$defs.NodeId", ws_node, NODE_ID_PATTERN)
+    _check_pattern_equal("ws.$defs.NodeId", ws_node, ssot_node_pat)
 
-    try:
-        ws_img = _get_jsonschema_defs_pattern(ws_schema_path, "ImagePath")
-        _check_pattern_equal("ws.$defs.ImagePath", ws_img, expected_image_path_pattern)
-    except KeyError:
-        print("[WARN] ws schema has no $defs.ImagePath.pattern (skipped)")
+    ws_img = _get_jsonschema_defs_pattern(ws_schema_path, "ImagePath")
+    _check_pattern_equal("ws.$defs.ImagePath", ws_img, ssot_image_pat)
 
-    # --- Logging defs patterns must match SSOT ---
+    # --- Logging defs must match SSOT ---
     log_schema_path = ROOT / "hub" / "contracts" / "logging" / "vision_log_line.schema.json"
     log_snapshot = _get_jsonschema_defs_pattern(log_schema_path, "SnapshotId")
-    _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot, SNAPSHOT_ID_PATTERN)
+    _check_pattern_equal("logging.$defs.SnapshotId", log_snapshot, ssot_snapshot_pat)
 
-    try:
-        log_node = _get_jsonschema_defs_pattern(log_schema_path, "NodeId")
-        _check_pattern_equal("logging.$defs.NodeId", log_node, NODE_ID_PATTERN)
-    except KeyError:
-        # fallback: some schemas keep node_id pattern inline; but we want $defs now
-        print("[FAIL] logging schema must define $defs.NodeId.pattern")
-        raise SystemExit(1)
+    log_node = _get_jsonschema_defs_pattern(log_schema_path, "NodeId")
+    _check_pattern_equal("logging.$defs.NodeId", log_node, ssot_node_pat)
 
-    try:
-        log_img = _get_jsonschema_defs_pattern(log_schema_path, "ImagePath")
-        _check_pattern_equal("logging.$defs.ImagePath", log_img, expected_image_path_pattern)
-    except KeyError:
-        print("[FAIL] logging schema must define $defs.ImagePath.pattern")
-        raise SystemExit(1)
+    log_img = _get_jsonschema_defs_pattern(log_schema_path, "ImagePath")
+    _check_pattern_equal("logging.$defs.ImagePath", log_img, ssot_image_pat)
 
-    # --- Node config schema node_id pattern must match SSOT ---
+    # --- Node config schema node_id must match SSOT ---
     node_cfg = ROOT / "node" / "contracts" / "node" / "node_config.schema.json"
-    if node_cfg.exists():
-        node_cfg_node_id = _get_jsonschema_prop_pattern(node_cfg, "node_id")
-        _check_pattern_equal("node.node_config.node_id", node_cfg_node_id, NODE_ID_PATTERN)
-    else:
+    if not node_cfg.exists():
         print("[FAIL] node config schema missing:", node_cfg)
         raise SystemExit(1)
+
+    node_cfg_node_id = _get_jsonschema_prop_pattern(node_cfg, "node_id")
+    _check_pattern_equal("node.node_config.node_id", node_cfg_node_id, ssot_node_pat)
 
     # --- Enforce $ref-only usage (WS / logging) ---
     ws = load_json(ws_schema_path)
     _scan_require_ref_for_field(ws, "node_id", "#/$defs/NodeId")
     _scan_require_ref_for_field(ws, "snapshot_id", "#/$defs/SnapshotId")
-    # Only enforce if you actually use image_path in WS messages; if not used, scan is harmless.
-    # It will only fail if an image_path property exists and isn't $ref-only.
     _scan_require_ref_for_field(ws, "image_path", "#/$defs/ImagePath")
 
     log = load_json(log_schema_path)
@@ -322,26 +325,22 @@ def check_contract_consistency(spec: dict):
     _scan_require_ref_for_field(log, "image_path", "#/$defs/ImagePath")
 
     # --- Enforce $ref-only usage (OpenAPI key properties) ---
-    # Ensure the places you care about are using $ref and not inline patterns.
     _require_openapi_prop_ref(spec, "CaptureResponse", "snapshot_id", "#/components/schemas/SnapshotId")
     _require_openapi_prop_ref(spec, "SnapshotUploadResponse", "image_path", "#/components/schemas/ImagePath")
 
-    # If your OpenAPI has any schema with node_id, add checks here.
-    # Example (uncomment and adjust when you add node_id into OpenAPI):
-    # _require_openapi_prop_ref(spec, "NodeRegisterRequest", "node_id", "#/components/schemas/NodeId")
-
     # --- canonical sample checks ---
     snapshot_sample = "s-20260202-173012-4f2a9c10"
-    _check_pattern_matches_sample("snapshot_id.v0.1", SNAPSHOT_ID_PATTERN, snapshot_sample)
+    _check_pattern_matches_sample("snapshot_id.v0.1", ssot_snapshot_pat, snapshot_sample)
 
     node_sample = "cam-01"
-    _check_pattern_matches_sample("node_id.v0.1", NODE_ID_PATTERN, node_sample)
+    _check_pattern_matches_sample("node_id.v0.1", ssot_node_pat, node_sample)
 
     data_root, subdir = _load_hub_config_constants()
     data_root = str(data_root).strip("/\\")
     subdir = str(subdir).strip("/\\")
     image_sample = f"{data_root}/{subdir}/2026-02-02/{node_sample}/{snapshot_sample}.jpg"
-    _check_pattern_matches_sample("image_path.v0.1", expected_image_path_pattern, image_sample)
+    _check_pattern_matches_sample("image_path.v0.1", ssot_image_pat, image_sample)
+
 
 
 
