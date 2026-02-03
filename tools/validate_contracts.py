@@ -248,8 +248,8 @@ def check_contract_consistency(spec: dict):
 
     # --- image_path patterns must not drift ---
     expected_image_path_pattern = _build_image_path_pattern()
-    openapi_snapshot_pat = _get_openapi_component_pattern(spec, "SnapshotId")
-    _check_pattern_equal("openapi.components.SnapshotId", openapi_snapshot_pat, SNAPSHOT_ID_PATTERN)
+    openapi_image_path_pat = _get_openapi_component_pattern(spec, "ImagePath")
+    _check_pattern_equal("openapi.components.ImagePath", openapi_image_path_pat, expected_image_path_pattern)
 
     try:
         log_image_path = _get_jsonschema_defs_pattern(log_schema, "ImagePath")
@@ -262,8 +262,8 @@ def check_contract_consistency(spec: dict):
     cap_node_id = _get_jsonschema_prop_pattern(cap_schema, "node_id")
     _check_pattern_equal("capabilities.node_id", cap_node_id, NODE_ID_PATTERN)
 
-    log_node_id = _get_jsonschema_prop_pattern(log_schema, "node_id")
-    _check_pattern_equal("logging.node_id", log_node_id, NODE_ID_PATTERN)
+    log_node_id = _get_jsonschema_defs_pattern(log_schema, "NodeId")
+    _check_pattern_equal("logging.$defs.NodeId", log_node_id, NODE_ID_PATTERN)
 
     # WS may or may not define NodeId; if present, enforce
     try:
