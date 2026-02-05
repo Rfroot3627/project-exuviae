@@ -1,0 +1,6 @@
+{
+  "node_id": "cam-01",
+  "snapshot_id": "s-20260202-173012-4f2a9c10",
+  "meta": "{\"note\":\"optional json string\"}",
+  "image": "<binary jpeg>"
+}

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "exuviae://contracts/ws/messages.schema.json",
+  "title": "WebSocketMessage",
+  "oneOf": [
+    { "$ref": "#/$defs/CommandCaptureSnapshot" },
+    { "$ref": "#/$defs/Ack" },
+    { "$ref": "#/$defs/Error" },
+    { "$ref": "#/$defs/Heartbeat" }
+  ],
+  "$defs": {
+    "Base": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "NodeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$"
+    },
+
+    "SnapshotId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$"
+    },
+
+    "ImagePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^data/snapshots/[0-9]{4}-[0-9]{2}-[0-9]{2}/[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}/s-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}\\.jpg$"
+    },
+
+    "CommandCaptureSnapshot": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["type", "snapshot_id", "params"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "const": "command.capture_snapshot" },
+            "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
+            "params": {
+              "type": "object",
+              "required": ["format", "resolution"],
+              "additionalProperties": true,
+              "properties": {
+                "format": { "type": "string", "enum": ["jpeg"] },
+                "resolution": {
+                  "type": "string",
+                  "pattern": "^[0-9]{2,5}x[0-9]{2,5}$"
+                }
+              }
+            },
+            "issued_at": { "type": "string" }
+          }
+        }
+      ]
+    },
+
+    "Ack": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["type", "snapshot_id", "status"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "const": "ack" },
+            "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
+            "status": {
+              "type": "string",
+              "enum": ["capturing", "uploading", "done"]
+            }
+          }
+        }
+      ]
+    },
+
+    "Error": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["type", "snapshot_id", "code", "message"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "const": "error" },
+            "snapshot_id": { "$ref": "#/$defs/SnapshotId" },
+            "code": {
+              "type": "string",
+              "enum": [
+                "invalid_params",
+                "busy",
+                "camera_unavailable",
+                "capture_failed",
+                "upload_failed"
+              ]
+            },
+            "message": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        }
+      ]
+    },
+
+    "Heartbeat": {
+      "allOf": [
+        { "$ref": "#/$defs/Base" },
+        {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": true,
+          "properties": {
+            "type": { "const": "heartbeat" },
+            "ts": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}
