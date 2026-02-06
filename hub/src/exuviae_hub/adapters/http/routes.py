@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, Form, UploadFile, WebSocket, WebSocketDisconnect, HTTPException
 
 from ...application.usecases.ingest_snapshot_upload import IngestSnapshotUpload
 from .dto import (
@@ -27,12 +27,18 @@ async def register_node(body: NodeRegister):
 
 @router.get("/api/v0/nodes", response_model=NodeListResponse)
 async def list_nodes():
-    return NodeListResponse(ok=True, nodes=[])
+    # DoD v0.1 does not explicitly require listing nodes.
+    # Supporting it strictly for management is not part of "Capture -> Describe -> Log" loop.
+    # marked as TODO/Not Implemented for MVP.
+    raise HTTPException(status_code=501, detail="Not implemented in MVP v0.1")
+    # return NodeListResponse(ok=True, nodes=[])
 
 
 @router.post("/api/v0/capture", response_model=CaptureResponse)
 async def request_capture(body: CaptureRequest):
-    return CaptureResponse(ok=True, snapshot_id="s-dummy-id")
+    from ...core.ids import new_snapshot_id
+    snapshot_id = new_snapshot_id()
+    return CaptureResponse(ok=True, snapshot_id=snapshot_id)
 
 
 @router.post("/api/v0/snapshots/upload")
