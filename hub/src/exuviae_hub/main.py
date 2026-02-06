@@ -29,8 +29,6 @@ def create_app() -> FastAPI:
 
     ingest_uc = IngestSnapshotUpload(
         snapshot_store=snapshot_store,
-        describer=describer,
-        log_writer=log_writer,
     )
 
     # Patch router DI function (v0.1 simple; later replace with proper DI)

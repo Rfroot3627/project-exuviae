@@ -8,7 +8,3 @@ class Settings(BaseSettings):
         env_prefix = "EXUVIAE_"
 
 settings = Settings()
-
-# Export for existing code compatibility
-DATA_ROOT = settings.DATA_ROOT
-SNAPSHOT_SUBDIR = settings.SNAPSHOT_SUBDIR

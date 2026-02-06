@@ -12,22 +12,8 @@ TZ_TAIPEI = ZoneInfo("Asia/Taipei")
 
 
 def _is_safe_node_id(node_id: str) -> bool:
-    # Keep in sync with contracts (node_id pattern)
-    # ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$
-    if not node_id:
-        return False
-    if len(node_id) > 64:
-        return False
-    first = node_id[0]
-    if not (first.isalnum()):
-        return False
-    for ch in node_id:
-        if ch.isalnum():
-            continue
-        if ch in "._-":
-            continue
-        return False
-    return True
+    from ...core.patterns import validate_by_pattern
+    return validate_by_pattern("node_id", node_id)
 
 
 @dataclass(frozen=True)
@@ -68,13 +54,18 @@ class FsSnapshotStore:
 
         date_bucket = now.strftime("%Y-%m-%d")
         # v0.1: jpeg only -> .jpg
-        rel = f"{config.DATA_ROOT}/{config.SNAPSHOT_SUBDIR}/{date_bucket}/{node_id}/{snapshot_id}.jpg"
+        rel = f"{config.settings.DATA_ROOT}/{config.settings.SNAPSHOT_SUBDIR}/{date_bucket}/{node_id}/{snapshot_id}.jpg"
         return rel
 
     def save_jpeg(self, node_id: str, snapshot_id: str, jpeg_bytes: bytes, now: datetime | None = None) -> StoredSnapshot:
         rel = self.build_relative_path(node_id=node_id, snapshot_id=snapshot_id, now=now)
-        abs_path = (self._repo_root / rel).resolve()
+        
+        # Validate against SSOT image_path pattern
+        from ...core.patterns import validate_by_pattern
+        if not validate_by_pattern("image_path", rel):
+            raise ValueError(f"generated path {rel!r} does not match SSOT image_path pattern")
 
+        abs_path = (self._repo_root / rel).resolve()
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_bytes(jpeg_bytes)
 

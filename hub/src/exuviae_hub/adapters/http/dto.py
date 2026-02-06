@@ -6,6 +6,7 @@ class OkResponse(BaseModel):
 
 class SnapshotUploadResponse(BaseModel):
     ok: bool
+    snapshot_id: str
     image_path: str
 
 class NodeRegister(BaseModel):
