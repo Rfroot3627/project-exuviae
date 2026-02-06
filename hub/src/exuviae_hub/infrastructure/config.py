@@ -1,3 +1,14 @@
-DATA_ROOT = "data"
+from pydantic_settings import BaseSettings
 
-SNAPSHOT_SUBDIR = "snapshots"
+class Settings(BaseSettings):
+    DATA_ROOT: str = "data"
+    SNAPSHOT_SUBDIR: str = "snapshots"
+
+    class Config:
+        env_prefix = "EXUVIAE_"
+
+settings = Settings()
+
+# Export for existing code compatibility
+DATA_ROOT = settings.DATA_ROOT
+SNAPSHOT_SUBDIR = settings.SNAPSHOT_SUBDIR

@@ -1,0 +1,12 @@
+[project]
+name = "exuviae-hub"
+version = "0.1.0"
+description = "Exuviae Hub"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "python-multipart>=0.0.6",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0"
+]

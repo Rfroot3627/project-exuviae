@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, UploadFile, WebSocket, WebSocketDisconnect
 
 from ...application.usecases.ingest_snapshot_upload import IngestSnapshotUpload
+from .dto import (
+    OkResponse,
+    NodeRegister,
+    NodeListResponse,
+    CaptureRequest,
+    CaptureResponse,
+    SnapshotUploadResponse
+)
 
 router = APIRouter()
 
@@ -10,6 +18,21 @@ router = APIRouter()
 def get_ingest_usecase() -> IngestSnapshotUpload:
     # This will be replaced by DI wiring in main.py
     raise RuntimeError("DI not wired: IngestSnapshotUpload")
+
+
+@router.post("/api/v0/nodes/register", response_model=OkResponse)
+async def register_node(body: NodeRegister):
+    return OkResponse(ok=True)
+
+
+@router.get("/api/v0/nodes", response_model=NodeListResponse)
+async def list_nodes():
+    return NodeListResponse(ok=True, nodes=[])
+
+
+@router.post("/api/v0/capture", response_model=CaptureResponse)
+async def request_capture(body: CaptureRequest):
+    return CaptureResponse(ok=True, snapshot_id="s-dummy-id")
 
 
 @router.post("/api/v0/snapshots/upload")
@@ -23,3 +46,14 @@ async def upload_snapshot(
     uc = get_ingest_usecase()
     result = uc.handle(node_id=node_id, snapshot_id=snapshot_id, jpeg_bytes=jpeg_bytes)
     return result
+
+
+@router.websocket("/ws/v0")
+async def websocket_endpoint(websocket: WebSocket, node_id: str):
+    await websocket.accept()
+    try:
+        while True:
+            # Keep connection open for skeleton
+            _ = await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
