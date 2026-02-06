@@ -21,7 +21,7 @@ class JsonlLogWriter:
 
     def _abs_log_path(self) -> Path:
         root = self.repo_root or Path.cwd()
-        return (root / config.settings.DATA_ROOT / "logs" / "vision.jsonl").resolve()
+        return (root / config.settings.DATA_ROOT / config.settings.LOG_SUBDIR / config.settings.VISION_LOG_FILENAME).resolve()
 
     def append_vision_log_line(self, line: dict) -> None:
         # Ensure directory exists
