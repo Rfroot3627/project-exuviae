@@ -21,3 +21,8 @@
 - 檔案清單（含新增/修改/刪除）
 - 驗收命令與結果（至少貼出最後一段 OK）
 - 若有取捨，說明取捨理由與替代方案
+
+## 關於測試與環境
+- hub相關測試使用的環境為 hub\.venv\Scripts\python
+- node相關測試使用的環境為 node\.venv\Scripts\python
+- 文件與規格相關測試使用的環境為 .venv\Scripts\python

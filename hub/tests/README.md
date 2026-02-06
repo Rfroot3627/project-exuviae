@@ -1,5 +1,17 @@
 # Hub Tests
 
+## 安裝測試依賴
+
+```bash
+cd c:\Github_RRR\project-exuviae\hub
+.venv\Scripts\pip install -e ".[test]"
+```
+
+或手動安裝：
+```bash
+.venv\Scripts\pip install requests
+```
+
 ## 執行測試
 
 ### API 測試
