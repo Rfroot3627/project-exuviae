@@ -59,3 +59,5 @@ node_modules/
 *.old
 review_bundles/
 *~
+hub/.e2e_tmp_get_log_path.py
+hub/.e2e_tmp_upload.py

@@ -178,6 +178,49 @@ print(str(p))
   return $logPath
 }
 
+function Get-DataRoot([string]$hubDir, [string]$venvPython) {
+  $code = @"
+from exuviae_hub.infrastructure.config import settings
+from pathlib import Path
+print(str(Path(settings.DATA_ROOT)))
+"@
+
+  $tmp = Join-Path $hubDir ".e2e_tmp_get_data_root.py"
+  Set-Content -LiteralPath $tmp -Value $code -Encoding UTF8
+
+  try {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $venvPython
+    $psi.WorkingDirectory = $hubDir
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $psi.Arguments = "`"$tmp`""
+
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
+    [void]$p.Start()
+    $stdout = $p.StandardOutput.ReadToEnd()
+    $stderr = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+
+    if ($p.ExitCode -ne 0) {
+      if ($stderr) { Write-Host $stderr }
+      throw "Get-DataRoot failed"
+    }
+
+    $dataRoot = $stdout.Trim()
+    if (-not [System.IO.Path]::IsPathRooted($dataRoot)) {
+      $dataRoot = (Resolve-Path (Join-Path $hubDir $dataRoot)).Path
+    }
+    return $dataRoot
+  }
+  finally {
+    Remove-Item -ErrorAction SilentlyContinue $tmp
+  }
+}
+
+
 function Get-LogLineCount([string]$path) {
   if (-not (Test-Path $path)) { return 0 }
   return (Get-Content -LiteralPath $path -ErrorAction Stop).Count
@@ -199,6 +242,9 @@ try {
   Write-Host "[debug] hub python = $hubPython" -ForegroundColor DarkGray
 
   $logPath = Get-LogPath -hubDir $hubDir -venvPython $hubPython
+  $dataRootAbs = Get-DataRoot -hubDir $hubDir -venvPython $hubPython
+  Write-Host "[info] Data root: $dataRootAbs" -ForegroundColor DarkGray
+
   $beforeLogCount = Get-LogLineCount -path $logPath
   Write-Host "[info] Log path: $logPath" -ForegroundColor DarkGray
   Write-Host "[info] Log lines before: $beforeLogCount" -ForegroundColor DarkGray
@@ -266,8 +312,17 @@ print(r.text)
   Write-Host "[ok] upload ok, image_path = $($uploadResp.image_path)" -ForegroundColor Green
 
   # ---- Step 3: Verify file exists ----
+  # Resolve stored image path against settings.DATA_ROOT (avoid hardcoding repo layout)
   $imagePathRel = $uploadResp.image_path
-  $imageAbs = Join-Path $hubDir $imagePathRel
+  $norm = $imagePathRel.Replace('\','/')
+
+  if ([System.IO.Path]::IsPathRooted($imagePathRel)) {
+    $imageAbs = $imagePathRel
+  } else {
+    # Contract uses "data/..." as a logical prefix; map it under DATA_ROOT
+    if ($norm.StartsWith("data/")) { $norm = $norm.Substring(5) }
+    $imageAbs = Join-Path $dataRootAbs ($norm -replace '/','\')
+  }
   if (-not (Test-Path $imageAbs)) {
     throw "stored image not found: $imageAbs (from image_path=$imagePathRel)"
   }
