@@ -54,12 +54,33 @@ async def upload_snapshot(
     return result
 
 
+from typing import List
+
+class ConnectionManager:
+    """Minimal WS manager to allow broadcasting for MVP testing."""
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
 @router.websocket("/ws/v0")
 async def websocket_endpoint(websocket: WebSocket, node_id: str):
-    await websocket.accept()
+    await manager.connect(websocket)
     try:
         while True:
-            # Keep connection open for skeleton
-            _ = await websocket.receive_text()
+            # Broadcast received messages to allow trigger tools to reach nodes
+            data = await websocket.receive_text()
+            await manager.broadcast(data)
     except WebSocketDisconnect:
-        pass
+        manager.disconnect(websocket)

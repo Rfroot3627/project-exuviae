@@ -27,6 +27,23 @@ python -m venv .venv
 $env:NODE_REGISTER=1; .venv\Scripts\python scripts/pr4_smoke.py
 ```
 
-**SSOT 保證**:
-- 腳本執行時會印出解析到的 Endpoint 與欄位清單。
-- 若契約定義有誤，腳本將啟動 Fail-fast 機制立即報錯。
+### 3. WS 指令觸發測試 (Strict SSOT)
+
+此流程驗證「Hub 發送 WS 指令 -> Node 執行上傳 -> Hub 落盤」的完整路徑。
+
+**1. 啟動 Node WS 客戶端**:
+```powershell
+# 在 node 目錄執行
+$env:HUB_WS_URL="ws://127.0.0.1:8000/ws/v0?node_id=cam-test-01"
+.venv\Scripts\python scripts/ws_node_smoke.py
+```
+
+**2. 發送模擬指令**:
+```powershell
+# 在另一個終端機執行
+.venv\Scripts\python scripts/trigger_capture_ws.py
+```
+
+**預期結果**:
+- Node 端收到指令並完成上傳。
+- Hub 端 `data/snapshots/` 產生影像，`vision.jsonl` 增加一筆紀錄。
