@@ -8,7 +8,7 @@ from exuviae_hub.infrastructure.config import settings
 
 def test_pr4_command_to_logline_flow(tmp_path):
     # Setup: Use tmp_path for data root
-    # We keep 'data' as subdir to match SSOT ^data/
+    # 使用 tmp repo_root 注入 store/log 的根目錄；實際相對路徑由 settings/patterns 決定
     repo_root = tmp_path
     
     from exuviae_hub.infrastructure.storage.fs_snapshot_store import FsSnapshotStore
