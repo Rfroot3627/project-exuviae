@@ -31,19 +31,28 @@ $env:NODE_REGISTER=1; .venv\Scripts\python scripts/pr4_smoke.py
 
 此流程驗證「Hub 發送 WS 指令 -> Node 執行上傳 -> Hub 落盤」的完整路徑。
 
-**1. 啟動 Node WS 客戶端**:
+**手動執行 (分步)**:
+1. **啟動 Node WS 客戶端**:
+   ```powershell
+   $env:HUB_WS_URL="ws://127.0.0.1:8000/ws/v0?node_id=cam-test-01"
+   .venv\Scripts\python scripts/ws_node_smoke.py
+   ```
+2. **發送模擬指令** (另開視窗):
+   ```powershell
+   .venv\Scripts\python scripts/trigger_capture_ws.py
+   ```
+
+**自動化執行 (推薦)**:
+在專案根目錄執行一鍵自動化測試：
 ```powershell
-# 在 node 目錄執行
-$env:HUB_WS_URL="ws://127.0.0.1:8000/ws/v0?node_id=cam-test-01"
-.venv\Scripts\python scripts/ws_node_smoke.py
+./scripts/check.ps1 -E2EWS
 ```
 
-**2. 發送模擬指令**:
-```powershell
-# 在另一個終端機執行
-.venv\Scripts\python scripts/trigger_capture_ws.py
-```
+**SSOT 保證**:
+- 腳本執行時會**動態解析** `hub/contracts/` 下的 OpenAPI 與 JSON Schema。
+- 若契約定義有誤（如欄位名變動），腳本將啟動 Fail-fast 機制立即報錯，不依賴硬編碼。
 
-**預期結果**:
+## 預期結果
 - Node 端收到指令並完成上傳。
-- Hub 端 `data/snapshots/` 產生影像，`vision.jsonl` 增加一筆紀錄。
+- Hub 端 `DATA_ROOT/snapshots/` 產生影像。
+- Hub 端 `DATA_ROOT/logs/vision.jsonl` 增加一筆紀錄且 ID 匹配。
