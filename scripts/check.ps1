@@ -1,6 +1,7 @@
 # scripts/check.ps1
 param(
-  [switch]$E2E
+  [switch]$E2E,
+  [switch]$E2EWS
 )
 
 Set-StrictMode -Version Latest
@@ -66,6 +67,12 @@ if ($E2E) {
   Write-Host "`n== (3) PR4 E2E smoke ==" -ForegroundColor Cyan
   powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\e2e_pr4.ps1")
   Assert-LastExitCode "PR4 E2E smoke"
+}
+
+if ($E2EWS) {
+  Write-Host "`n== (4) WS E2E smoke ==" -ForegroundColor Cyan
+  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\e2e_ws_pr5.ps1")
+  Assert-LastExitCode "WS E2E smoke"
 }
 
 Write-Host "`n✅ CHECK OK" -ForegroundColor Green
