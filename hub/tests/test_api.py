@@ -8,6 +8,9 @@ Hub API 測試工具 (v0.1 MVP)
 - POST /api/v0/snapshots/upload
 - GET /api/v0/nodes (應回傳 501)
 """
+import pytest
+pytestmark = pytest.mark.e2e
+
 import requests
 import json
 from pathlib import Path

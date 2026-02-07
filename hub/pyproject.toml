@@ -22,3 +22,13 @@ test = [
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "e2e: cross-process / slow smoke tests (normally run manually)",
+  "contract: contract/SSOT consistency checks",
+]
+addopts = [
+  "--strict-markers",
+]
