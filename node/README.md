@@ -10,19 +10,23 @@ python -m venv .venv
 .venv\Scripts\pip install requests
 ```
 
-### 2. PR4 Smoke 整合測試
+### 2. PR4 Smoke 整合測試 (Strict SSOT)
 
-此腳本用於模擬 Node 接收指令後，與已啟動的 Hub 進行「獲取 ID -> 上傳影像」的完整流程。
+此腳本會**動態解析** `hub/contracts/http/openapi.v0.yaml` 契約，自動提取所有 API 端點與欄位名稱。
 
-**前提條件**: Hub 伺服器必須正在運行 (`python -m exuviae_hub.main`)。
+**前提條件**: Hub 伺服器必須正在運行。
 
 ```powershell
-# 執行 Smoke 腳本
+# 執行基本 Smoke (自動解析契約 -> Capture -> Upload)
 .venv\Scripts\python scripts/pr4_smoke.py
+
+# 執行包含註冊的 Smoke
+.venv\Scripts\python scripts/pr4_smoke.py --register
+
+# 使用環境變數觸發註冊
+$env:NODE_REGISTER=1; .venv\Scripts\python scripts/pr4_smoke.py
 ```
 
-**預期行為**:
-1. 向 Hub 請求並獲取 `snapshot_id`。
-2. 以 Multipart 形式上傳 mock JPEG 影像。
-3. 輸出 Hub 回傳的 `image_path`。
-4. 最終 Hub 端的 `vision.jsonl` 應會增加一筆與此 `snapshot_id` 關聯的紀錄。
+**SSOT 保證**:
+- 腳本執行時會印出解析到的 Endpoint 與欄位清單。
+- 若契約定義有誤，腳本將啟動 Fail-fast 機制立即報錯。
