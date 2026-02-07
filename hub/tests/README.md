@@ -13,7 +13,7 @@ Hub 的測試應在 `hub` 目錄下的虛擬環境中執行。
 ## 執行測試
 
 ### 自動化測試 (Automated Tests)
-使用 `pytest` 執行整合測試，驗證 PR4 資料流（指令 -> 捕獲 -> 日誌）。
+使用 `pytest` 執行整合測試，驗證完整資料流：Capture -> Upload(persist) -> Logline。
 
 ```powershell
 cd hub
@@ -31,17 +31,17 @@ cd hub
 
 #### 步驟 1：觸發捕獲指令 (HTTP)
 ```powershell
-$r = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v0/capture" -Body '{"node_id":"cam_test_01"}' -ContentType "application/json"
+$r = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v0/capture" -Body '{"node_id":"cam-test-01"}' -ContentType "application/json"
 $sid = $r.snapshot_id
 ```
 
 #### 步驟 2：執行影像上傳 (對齊 OpenAPI 欄位)
 ```powershell
-.venv\Scripts\python -c "import requests; r = requests.post('http://127.0.0.1:8000/api/v0/snapshots/upload', data={'node_id':'cam_test_01', 'snapshot_id':'$sid'}, files={'image':('t.jpg', b'\xff\xd8\xff\xd9', 'image/jpeg')}); print(r.json())"
+.venv\Scripts\python -c "import requests; r = requests.post('http://127.0.0.1:8000/api/v0/snapshots/upload', data={'node_id':'cam-test-01', 'snapshot_id':'$sid'}, files={'image':('t.jpg', b'\xff\xd8\xff\xd9', 'image/jpeg')}); print(r.json())"
 ```
 
-#### 步驟 3：確認日誌產出 (動態路徑推導)
-不依賴硬編碼路徑，確保與 `Settings` 一致：
+#### 步驟 3：確認日誌產出 (影像落盤後)
+追加日誌發生於影像上傳完成時。請透過 Python 動態推導路徑並確認行數：
 ```powershell
 .venv\Scripts\python -c "from exuviae_hub.infrastructure.config import settings; from pathlib import Path; p = Path(settings.DATA_ROOT) / settings.LOG_SUBDIR / settings.VISION_LOG_FILENAME; print(f'Total Log Lines: {len(p.read_text().splitlines())}')"
 ```

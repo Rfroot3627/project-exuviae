@@ -35,7 +35,7 @@ def test_pr4_command_to_logline_flow(tmp_path):
     
     client = TestClient(app)
     
-    node_id = "cam_test_01" # Valid node_id
+    node_id = "cam-test-01" # Valid node_id
     
     # 1. Trigger Capture (Command)
     resp_capture = client.post("/api/v0/capture", json={"node_id": node_id})

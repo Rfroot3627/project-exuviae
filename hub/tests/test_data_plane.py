@@ -11,12 +11,21 @@ def test_upload_image_mvp(tmp_path):
     repo_root = tmp_path
     
     from exuviae_hub.infrastructure.storage.fs_snapshot_store import FsSnapshotStore
+    from exuviae_hub.infrastructure.storage.jsonl_log_writer import JsonlLogWriter
+    from exuviae_hub.infrastructure.vision.describer_stub import StubVisionDescriber
     from exuviae_hub.application.usecases.ingest_snapshot_upload import IngestSnapshotUpload
     
-    # 1. Create a store with the temp repo_root
+    # 1. Create dependencies with the temp repo_root
     store = FsSnapshotStore(repo_root=repo_root)
+    log_writer = JsonlLogWriter(repo_root=repo_root)
+    describer = StubVisionDescriber()
+    
     # 2. Create the use case
-    ingest_uc = IngestSnapshotUpload(snapshot_store=store)
+    ingest_uc = IngestSnapshotUpload(
+        snapshot_store=store,
+        describer=describer,
+        log_writer=log_writer,
+    )
     
     app = create_app()
     # 3. Inject our test use case
