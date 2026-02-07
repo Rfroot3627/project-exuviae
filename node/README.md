@@ -54,5 +54,18 @@ $env:NODE_REGISTER=1; .venv\Scripts\python scripts/pr4_smoke.py
 
 ## 預期結果
 - Node 端收到指令並完成上傳。
-- Hub 端 `DATA_ROOT/snapshots/` 產生影像。
-- Hub 端 `DATA_ROOT/logs/vision.jsonl` 增加一筆紀錄且 ID 匹配。
+## WS 轉發機制說明 (Test Relay)
+
+### 契約與協議範圍
+本專案的 WebSocket 通訊協議嚴格定義於以下檔案：
+- **消息結構**: [messages.schema.json](../hub/contracts/ws/messages.schema.json)
+- **端點定義**: [openapi.v0.yaml](../hub/contracts/http/openapi.v0.yaml) 中的 `/ws/v0`
+
+### 測試中繼 (Test Relay) 行為警告
+目前 Hub 實作的 **「全體廣播」** 行為僅為了滿足 v0.1 MVP 的測試需求（由 Hub 觸發拍照指令給 Node）。
+- **非協議保證**: 此轉發邏輯屬於「測試中繼」，**不屬於** 穩定版本的通訊協議。
+- **不可依賴**: 生產環境的 Node 或 Hub 不應將此廣播行為視為穩定的 Routing 規則。
+- **嚴格護欄**: Hub 已實作白名單護欄，僅會轉發契約中定義的消息類型，任何未知類型將被直接封鎖。
+
+### 契約缺口 (Contract Gap) 定義
+- **node_id**: 目前 OpenAPI 契約中 `/ws/v0` 缺少結構化的 `parameters` 定義。因此現有的 `?node_id=...` 傳遞方式僅視為測試輔助，不應作為生產環境的依據。

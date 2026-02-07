@@ -56,21 +56,78 @@ async def upload_snapshot(
 
 from typing import List
 
+import json
+from pathlib import Path
+
 class ConnectionManager:
-    """Minimal WS manager to allow broadcasting for MVP testing."""
+    """Minimal WS manager with dynamic contract-driven guardrails."""
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        self._whitelist = self._load_contract_whitelist()
+
+    def _load_contract_whitelist(self) -> set[str]:
+        """Dynamically extract allowed message types from messages.schema.json."""
+        try:
+            # hub/src/exuviae_hub/adapters/http/routes.py -> hub/
+            schema_path = Path(__file__).parent.parent.parent.parent.parent / "contracts/ws/messages.schema.json"
+            if not schema_path.exists():
+                # Fallback for different run contexts if needed, but primary is repo-relative
+                schema_path = Path("contracts/ws/messages.schema.json")
+            
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema = json.load(f)
+            
+            allowed = set()
+            # Walk oneOf to find types
+            for item in schema.get("oneOf", []):
+                ref = item.get("$ref")
+                if ref and ref.startswith("#/$defs/"):
+                    def_key = ref.split("/")[-1]
+                    item_def = schema.get("$defs", {}).get(def_key, {})
+                    
+                    # Consistently look for properties/type/const in defs (Standard pattern in our schema)
+                    # We look through allOf if present
+                    potential_defs = [item_def]
+                    if "allOf" in item_def:
+                        potential_defs.extend(item_def["allOf"])
+                    
+                    for d in potential_defs:
+                        t_const = d.get("properties", {}).get("type", {}).get("const")
+                        if t_const:
+                            allowed.add(t_const)
+            
+            if not allowed:
+                # Fail-fast: If we can't extract any types, the contract might have changed or be unreadable
+                print(f"CRITICAL: Failed to extract WS type whitelist from {schema_path}")
+                return set()
+            return allowed
+        except Exception as e:
+            print(f"CRITICAL: Error loading WS contract: {e}")
+            return set()
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
+        """Relay message only if type is in the contract-driven whitelist."""
+        try:
+            data = json.loads(message)
+            msg_type = data.get("type")
+            
+            if msg_type not in self._whitelist:
+                # Strict SSOT: No guessing, no unknown types
+                return
+                
+            for connection in self.active_connections:
+                await connection.send_text(message)
+        except Exception:
+            # Drop invalid JSON or other errors to avoid relaying garbage
+            pass
 
 manager = ConnectionManager()
 
