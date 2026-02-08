@@ -46,6 +46,7 @@ node/data/
 *.local
 settings.local.*
 config.local.*
+.agent/local/
 
 # ---- Jupyter ----
 .ipynb_checkpoints/

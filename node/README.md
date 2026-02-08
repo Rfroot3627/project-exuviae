@@ -7,10 +7,25 @@
 ```powershell
 cd node
 python -m venv .venv
-.venv\Scripts\pip install requests
+.venv\Scripts\pip install -e .
 ```
 
-### 2. PR4 Smoke 整合測試 (Strict SSOT)
+### 2. 配置系統 (Configuration)
+
+Node 採用靈活的優先序載入機制，支援環境變數、本地開發配置與預設值。
+
+#### 🔹 載入優先序 (Priority)
+1. **環境變數**: `EXUVIAE_NODE_CONFIG` 指向的絕對路徑。
+2. **本地配置**: `[RepoRoot]/.agent/local/config.yaml` (已在 `.gitignore` 中排除，適合開發者自定義)。
+3. **預設配置**: `node/src/exuviae_node/infrastructure/config/default.yaml`。
+
+#### 🔹 根目錄自動判定 (Repo Root)
+系統會自動從執行位置向上尋找包含 `node/` 或 `hub/` 的目錄作為根目錄。若要在本地測試自定義 Node ID，請依範例建立：
+`[RepoRoot]/.agent/local/config.yaml`
+
+---
+
+### 3. PR4 Smoke 整合測試 (Strict SSOT)
 
 此腳本會**動態解析** `hub/contracts/http/openapi.v0.yaml` 契約，自動提取所有 API 端點與欄位名稱。
 
