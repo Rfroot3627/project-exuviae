@@ -57,6 +57,31 @@
 
 ---
 
+## 🌐 區域網路 (LAN) 連線測試
+
+當您需要從其它裝置（如 Raspberry Pi）連線至 Windows 上的 Hub 時，請參考以下步驟。
+
+### 1. 啟動 Hub (監聽所有網面)
+使用專用腳本啟動 Hub，這會將伺服器綁定至 `0.0.0.0`：
+```powershell
+./scripts/run_hub_local.ps1
+```
+
+### 2. 開放 Windows 防火牆
+預設情況下，Windows 會阻擋外部連線。請以 **管理員權限** 執行以下 PowerShell 指令來開放 8000 埠口：
+```powershell
+# 新增防火牆規則 (僅限 TCP 8000)
+New-NetFirewallRule -DisplayName "Exuviae Hub LAN Access" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
+```
+
+### 3. 取回 IP 與連線
+1. 在 Windows 執行 `ipconfig` 找到您的 IPv4 Address (例如 `192.168.x.x`)。
+2. 在外部裝置嘗試存取：
+   - **Docs**: `http://<YOUR_IP>:8000/docs`
+   - **WS**: `ws://<YOUR_IP>:8000/ws/v0?node_id=pi-test`
+
+---
+
 ## 🤝 貢獻者說明
 - 請確保在修改 `hub` 或 `node` 的核心介面後，至少跑一遍 `./scripts/check.ps1 -All`。
 - 如果新增了新的通訊消息類型，請先更新 `hub/contracts/` 下的 schema，腳本會自動動態解析。
