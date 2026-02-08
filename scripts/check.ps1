@@ -3,7 +3,8 @@ param(
   [switch]$All,
   [switch]$E2E,
   [switch]$E2EHTTP,
-  [switch]$E2EWS
+  [switch]$E2EWS,
+  [switch]$Safety
 )
 
 Set-StrictMode -Version Latest
@@ -29,8 +30,15 @@ if (-not (Test-Path $hubPy)) {
 }
 
 # Mapping flags
-$runHTTP = $All -or $E2E -or $E2EHTTP
-$runWS   = $All -or $E2EWS
+$runHTTP   = $All -or $E2E -or $E2EHTTP
+$runWS     = $All -or $E2EWS
+$runSafety = $All -or $Safety
+
+if ($runSafety) {
+  Write-Host "`n== (S) Pre-publish Safety Audit ==" -ForegroundColor Cyan
+  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\pre_publish_check.ps1")
+  Assert-LastExitCode "Safety Audit"
+}
 
 Write-Host "`n== (1) Contract/Spec checks (root) ==" -ForegroundColor Cyan
 $specCandidates = @(
