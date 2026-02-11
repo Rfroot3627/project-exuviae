@@ -4,9 +4,11 @@
 
 ## 操作順序
 1. **檢查狀態**: `.\hub_firewall.ps1 status`
-2. **開放連線**: `.\hub_firewall.ps1 open` (需具備管理員權限)
+2. **開放連線**: 
+   - 方式 A (推薦): 執行 `.\elevated_firewall_run.ps1`，這會彈出 UAC 並啟動管理員視窗執行 `open` 指令。
+   - 方式 B: 以管理員身分手動開啟 PowerShell 並執行 `.\hub_firewall.ps1 open`。
 3. **啟動 Hub**: `.\run_hub.ps1`
-4. **關閉連線**: `.\hub_firewall.ps1 close` (測試完畢後)
+4. **關閉連線**: 同步驟 2，執行 `close` 指令。
 
 ## 配置
 請確保 `.agent/local/ops.env` 已建立並填入 `PI_IP` 與 `HUB_PORT`。

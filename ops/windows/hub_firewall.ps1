@@ -82,22 +82,32 @@ function Open-Firewall {
         Enabled = "True"
     }
 
-    if (Get-NetFirewallRule -Name $RULE_NAME -ErrorAction SilentlyContinue) {
-        Set-NetFirewallRule @ruleParams
-        Write-Host "Rule updated and enabled." -ForegroundColor Green
-    } else {
-        New-NetFirewallRule @ruleParams
-        Write-Host "New rule created and enabled." -ForegroundColor Green
+    try {
+        if (Get-NetFirewallRule -Name $RULE_NAME -ErrorAction SilentlyContinue) {
+            Set-NetFirewallRule @ruleParams
+            Write-Host "Rule updated and enabled." -ForegroundColor Green
+        } else {
+            New-NetFirewallRule @ruleParams
+            Write-Host "New rule created and enabled." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "[WARNING] Failed to apply firewall rule. Reason: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "TIP: This action requires Administrator privileges. Please run as Admin or use 'elevated_firewall_run.ps1'." -ForegroundColor White
     }
 }
 
 function Close-Firewall {
     Write-Host "== Closing Firewall Rule: $RULE_NAME ==" -ForegroundColor Cyan
-    if (Get-NetFirewallRule -Name $RULE_NAME -ErrorAction SilentlyContinue) {
-        Disable-NetFirewallRule -Name $RULE_NAME
-        Write-Host "Rule disabled." -ForegroundColor Yellow
-    } else {
-        Write-Host "Rule not found. Nothing to close." -ForegroundColor Gray
+    try {
+        if (Get-NetFirewallRule -Name $RULE_NAME -ErrorAction SilentlyContinue) {
+            Disable-NetFirewallRule -Name $RULE_NAME
+            Write-Host "Rule disabled." -ForegroundColor Yellow
+        } else {
+            Write-Host "Rule not found. Nothing to close." -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "[WARNING] Failed to close firewall rule. Reason: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "TIP: This action requires Administrator privileges." -ForegroundColor White
     }
 }
 

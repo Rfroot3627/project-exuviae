@@ -52,7 +52,12 @@ do_open() {
 
     check_ufw
     echo "== Opening Firewall for Pi ($PI_IP) on Port $HUB_PORT =="
-    sudo ufw allow from "$PI_IP" to any port "$HUB_PORT" proto tcp comment "$RULE_COMMENT"
+    if sudo ufw allow from "$PI_IP" to any port "$HUB_PORT" proto tcp comment "$RULE_COMMENT"; then
+        echo "Firewall rule successfully applied."
+    else
+        echo "[WARNING] Failed to apply firewall rule. Does the current user have sudo privileges?" >&2
+        echo "TIP: Please run 'sudo ./hub_firewall.sh open' manually if automation fails." >&2
+    fi
 }
 
 do_close() {
@@ -64,8 +69,11 @@ do_close() {
 
     check_ufw
     echo "== Closing Firewall Rule for Pi ($PI_IP) on Port $HUB_PORT =="
-    # ufw doesn't have "disable", so we use deny to 'close' it while keeping a record
-    sudo ufw deny from "$PI_IP" to any port "$HUB_PORT" proto tcp comment "$RULE_COMMENT"
+    if sudo ufw deny from "$PI_IP" to any port "$HUB_PORT" proto tcp comment "$RULE_COMMENT"; then
+        echo "Firewall rule successfully closed (denied)."
+    else
+        echo "[WARNING] Failed to close firewall rule. Does the current user have sudo privileges?" >&2
+    fi
 }
 
 case "$1" in
