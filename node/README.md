@@ -65,7 +65,27 @@ $env:NODE_REGISTER=1; .venv\Scripts\python scripts/pr4_smoke.py
 
 **SSOT 保證**:
 - 腳本執行時會**動態解析** `hub/contracts/` 下的 OpenAPI 與 JSON Schema。
+- 腳本執行時會**動態解析** `hub/contracts/` 下的 OpenAPI 與 JSON Schema。
 - 若契約定義有誤（如欄位名變動），腳本將啟動 Fail-fast 機制立即報錯，不依賴硬編碼。
+
+## 📸 相機拍照功能 (Camera Capture)
+
+本專案支援 Raspberry Pi Camera 拍照功能，並具備跨平台 Mock 機制。
+
+### 1. 支援硬體與模式
+- **Raspberry Pi**: 自動偵測 `rpicam-still` 或 `libcamera-still` 指令，執行真實拍照。
+- **Windows / Non-Pi**: 自動降級為 **Mock 模式**，生成全黑測試影像以驗證通訊流程。
+
+### 2. 觸發方式
+透過 Hub 發送 WebSocket 指令 `command.capture_snapshot`，Node 會自動：
+1. 執行拍照 (Real/Mock)。
+2. 將影像上傳至 Hub (`/api/v0/snapshots/upload`)。
+
+### 3. 本地驗證 (Mock)
+使用專用腳本驗證 Mock 拍照流程：
+```powershell
+./scripts/verify_node_capture_local.ps1
+```
 
 ## 預期結果
 - Node 端收到指令並完成上傳。

@@ -37,7 +37,29 @@ async def list_nodes():
 @router.post("/api/v0/capture", response_model=CaptureResponse)
 async def request_capture(body: CaptureRequest):
     from ...core.ids import new_snapshot_id
+    from datetime import datetime
+    
     snapshot_id = new_snapshot_id()
+    
+    # Construct WS Command
+    # Strict SSOT: Must match messages.schema.json
+    cmd = {
+        "type": "command.capture_snapshot",
+        "snapshot_id": snapshot_id,
+        "params": {
+            "format": "jpeg",
+            "resolution": "1280x720" # Default or parameterized from API? API v0.yaml CaptureRequest only has node_id.
+                                     # For MVP, hardcode valid resolution or derive from config if available.
+                                     # Let's use a safe default 640x480 for speed/safety.
+        },
+        "issued_at": datetime.utcnow().isoformat()
+    }
+    
+    # Broadcast to all (Node will filter by node_id if we add logic, or just handle if it's the target)
+    # Currently Node logic handles all commands it receives. 
+    # Ideally we should route to specific node_id, but broadcast is fine for MVP.
+    await manager.broadcast(json.dumps(cmd))
+    
     return CaptureResponse(ok=True, snapshot_id=snapshot_id)
 
 

@@ -40,6 +40,14 @@
 驗證「Hub WS 指令廣播 -> Node 執行 -> HTTP 上傳」的流程。
 - **特點**: 基於 SSOT 原則動態解析 Hub 設定，驗證跨協議的連動性。
 
+### `verify_node_capture_local.ps1` (Node Capture)
+驗證 Node 相機拍照功能的完整鏈路 (Unit/Mock)。
+- **功能**:
+  - 自動啟動 Hub 與 Node (使用 venv)。
+  - 透過 API 觸發拍照指令。
+  - 驗證 Node (Mock) 上傳的假圖片。
+- **用途**: 開發階段快速驗證拍照邏輯與通訊流程，無需真實硬體。
+
 ---
 
 ## 🛡️ 安全與維護
