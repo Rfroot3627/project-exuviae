@@ -69,20 +69,25 @@
 
 當您需要從其它裝置（如 Raspberry Pi）連線至 Windows 上的 Hub 時，請參考以下步驟。
 
-### 1. 啟動 Hub (監聽所有網面)
+### 1. 啟動 Hub (監聽所有介面)
 使用專用腳本啟動 Hub，這會將伺服器綁定至 `0.0.0.0`：
 ```powershell
 ./scripts/run_hub_local.ps1
 ```
+*(注意：請確保您的網路防火牆已適當配置以允許連線)*
 
-### 2. 開放 Windows 防火牆
-預設情況下，Windows 會阻擋外部連線。請以 **管理員權限** 執行以下 PowerShell 指令來開放 8000 埠口：
-```powershell
-# 新增防火牆規則 (僅限 TCP 8000)
-New-NetFirewallRule -DisplayName "Exuviae Hub LAN Access" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
-```
+#### ⚠️ 連線前提 (Prerequisites)
+若您遇到連線逾時 (Timeout)，請手動檢查以下設定：
 
-### 3. 取回 IP 與連線
+1. **Hub 綁定位址**: 必須使用 `0.0.0.0` 啟動 (腳本已預設)。
+2. **防火牆規則 (Firewall)**: 
+   Windows 預設會阻擋外部連線。若需開放，請以**管理員權限**執行 PowerShell：
+   ```powershell
+   # 手動開放 TCP 8000 埠口
+   New-NetFirewallRule -DisplayName "Exuviae Hub LAN Access" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
+   ```
+
+### 2. 取回 IP 與連線
 1. 在 Windows 執行 `ipconfig` 找到您的 IPv4 Address (例如 `192.168.x.x`)。
 2. 在外部裝置嘗試存取：
    - **Docs**: `http://<YOUR_IP>:8000/docs`
