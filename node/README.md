@@ -10,18 +10,23 @@ python -m venv .venv
 .venv\Scripts\pip install -e .
 ```
 
-### 2. 配置系統 (Configuration)
+### 2. 配置系統 (Configuration - v0.2)
 
-Node 採用靈活的優先序載入機制，支援環境變數、本地開發配置與預設值。
+Node 採用「規格先行」的載入機制。內容必須在 YAML 檔案中，環境變數僅作為指向該檔案的指標。
 
 #### 🔹 載入優先序 (Priority)
-1. **環境變數**: `EXUVIAE_NODE_CONFIG` 指向的絕對路徑。
-2. **本地配置**: `[RepoRoot]/.agent/local/config.yaml` (已在 `.gitignore` 中排除，適合開發者自定義)。
-3. **預設配置**: `node/src/exuviae_node/infrastructure/config/default.yaml`。
+1. **環境變數指定**: 讀取 `EXUVIAE_NODE_CONFIG` 指向的檔案路徑。
+   - **Fail-fast**: 若變數已設定但檔案不存在，Node 將立即報錯中止，避免回退到預設值。
+2. **自動向上搜尋**: 若無環境變數，將從執行路徑 (CWD) 開始向上搜尋 `.agent/local/config.yaml`。
+   - **停止條件**: 搜尋到專案根目錄（含 `.git` 或 `pyproject.toml`）即停止。支援巢狀部署環境。
+3. **預設配置**: 若以上皆無，回退至 `node/src/exuviae_node/infrastructure/config/default.yaml`。
+   - **警告**: 此時 `stderr` 會輸出明確警告與配置建議。
 
-#### 🔹 根目錄自動判定 (Repo Root)
-系統會自動從執行位置向上尋找包含 `node/` 或 `hub/` 的目錄作為根目錄。若要在本地測試自定義 Node ID，請依範例建立：
-`[RepoRoot]/.agent/local/config.yaml`
+#### 🔹 本地開發建議
+請依範例建立本地配置：
+- **位置**: `[RepoRoot]/.agent/local/config.yaml`
+- **注意**: 此目錄已由 `.gitignore` 排除，適合存放包含真實 IP 與 ID 的私有設定。
+- **範例檔**: 參考 `node/src/exuviae_node/infrastructure/config/default.yaml` 或專案提供的 `.example`。
 
 ---
 

@@ -25,51 +25,60 @@ class NodeSettings(BaseModel):
 
 # --- Logic ---
 
-def find_repo_root() -> Path:
-    """
-    自目前檔案位置向上尋找包含特定標記(hub, node, contracts)的專案根目錄。
-    避免硬編碼絕對路徑，確保跨環境穩定性。
-    """
-    current = Path(__file__).resolve().parent
-    # 向上最多爬 10 層，避免無限循環
-    for _ in range(10):
-        if (current / "hub").is_dir() or (current / "node").is_dir() or (current / "contracts").is_dir():
-            return current
-        if current.parent == current:
-            break
-        current = current.parent
-    
-    # 回退機制：若找不到（例如單獨發布時），改以 node/ 目錄判定
-    return Path(__file__).resolve().parent.parent.parent.parent.parent
 
-def load_config(config_path: Path | str = None) -> NodeSettings:
+def load_config() -> NodeSettings:
     """
-    載入配置優先序：
-    1. EXUVIAE_NODE_CONFIG 環境變數
-    2. [RepoRoot]/.agent/local/config.yaml (Gitignored)
-    3. 內建 default.yaml
+    載入配置優先序 (Strict v0.2)：
+    1. EXUVIAE_NODE_CONFIG 環境變數 (必須指定現有檔案路徑，否則 Fail-fast)
+    2. 向上搜尋：從 CWD 開始尋找 .agent/local/config.yaml，直到抵達專案根目錄 (.git 或 pyproject.toml)
+    3. 回退至 default.yaml 並輸出明確告警
     """
-    repo_root = find_repo_root()
-    
-    # 1. 環境變數優先
+    import sys
+
+    # 1. 環境變數優先 (Pointer Only)
     env_path = os.environ.get("EXUVIAE_NODE_CONFIG")
     if env_path:
         target = Path(env_path)
-    elif config_path:
-        target = Path(config_path)
-    else:
-        # 2. 本地配置 (由 .gitignore 排出的開發者自定義)
-        local_path = repo_root / ".agent" / "local" / "config.yaml"
-        if local_path.exists():
-            target = local_path
-        else:
-            # 3. 預設配置
-            target = Path(__file__).parent / "default.yaml"
-    
-    if not target.exists():
-        raise FileNotFoundError(f"Configuration file not found: {target}")
+        if not target.exists():
+            # [Fail-fast] 如果指定了環境變數但找不到檔案，禁止執行
+            raise RuntimeError(
+                f"FATAL: EXUVIAE_NODE_CONFIG is set but file not found: {target.absolute()}\n"
+                "Please check the path or unset the environment variable."
+            )
+        return _load_from_file(target)
 
-    with open(target, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    # 2. 向上搜尋 .agent/local/config.yaml
+    # 從執行路徑 (CWD) 開始向上爬
+    current = Path.cwd().resolve()
+    for _ in range(12): # 限制深度避免過度搜尋
+        local_config = current / ".agent" / "local" / "config.yaml"
+        if local_config.exists():
+            return _load_from_file(local_config)
+        
+        # 停止條件：抵達專案根目錄
+        if (current / ".git").exists() or (current / "pyproject.toml").exists():
+            break
+            
+        if current.parent == current:
+            break
+        current = current.parent
+
+    # 3. 回退至內建預設配置
+    default_path = Path(__file__).parent / "default.yaml"
     
+    print("=" * 60, file=sys.stderr)
+    print(f"WARNING: Using default config (v0.2 Fallback)", file=sys.stderr)
+    print(f"Path: {default_path.absolute()}", file=sys.stderr)
+    print("-" * 60, file=sys.stderr)
+    print("Advice:", file=sys.stderr)
+    print("  - To use custom config, set environment variable:", file=sys.stderr)
+    print("    $env:EXUVIAE_NODE_CONFIG = 'C:\\path\\to\\config.yaml'", file=sys.stderr)
+    print("  - Or place it at: .agent/local/config.yaml (gitignored)", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+
+    return _load_from_file(default_path)
+
+def _load_from_file(path: Path) -> NodeSettings:
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
     return NodeSettings.model_validate(data)
