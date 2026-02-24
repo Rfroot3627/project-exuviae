@@ -63,6 +63,11 @@ $env:NODE_REGISTER=1; .venv\Scripts\python scripts/pr4_smoke.py
 ./scripts/check.ps1 -E2EWS
 ```
 
+## 報到與連線流程 (Registration & Connection)
+Node 隨附自動報到機制，確保其在 Hub 的註冊表中具備「身分」：
+1. **HTTP 註冊**: 啟動時發送 `POST /api/v0/nodes/register`，傳遞 `capabilities`（例如：是否有相機）。
+2. **WS 持久連線**: 註冊成功後維持 WebSocket 連線以接收拍照指令。
+
 **SSOT 保證**:
 - 腳本執行時會**動態解析** `hub/contracts/` 下的 OpenAPI 與 JSON Schema。
 - 腳本執行時會**動態解析** `hub/contracts/` 下的 OpenAPI 與 JSON Schema。

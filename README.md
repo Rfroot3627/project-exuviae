@@ -12,6 +12,7 @@
 - `node/`: Node 客戶端實作 (Python)
 - `specs/`: 專案核心規範與原則
 - `scripts/`: 自動化驗證工具
+- `docs/ARCHITECTURE.md`: **[重要] 系統架構與設計文件**
 
 ## 快速驗證 (Windows PowerShell)
 本專案提供一鍵驗證導向的腳本：

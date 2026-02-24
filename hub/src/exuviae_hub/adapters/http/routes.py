@@ -19,19 +19,30 @@ def get_ingest_usecase() -> IngestSnapshotUpload:
     # This will be replaced by DI wiring in main.py
     raise RuntimeError("DI not wired: IngestSnapshotUpload")
 
+def get_register_usecase() -> RegisterNode:
+    raise RuntimeError("DI not wired: RegisterNode")
+
+def get_list_nodes_usecase() -> ListNodes:
+    raise RuntimeError("DI not wired: ListNodes")
+
 
 @router.post("/api/v0/nodes/register", response_model=OkResponse)
 async def register_node(body: NodeRegister):
-    return OkResponse(ok=True)
+    uc = get_register_usecase()
+    result = uc.handle(
+        node_id=body.node_id,
+        kind=body.kind,
+        firmware=body.firmware,
+        capabilities=body.capabilities
+    )
+    return result
 
 
 @router.get("/api/v0/nodes", response_model=NodeListResponse)
 async def list_nodes():
-    # DoD v0.1 does not explicitly require listing nodes.
-    # Supporting it strictly for management is not part of "Capture -> Describe -> Log" loop.
-    # marked as TODO/Not Implemented for MVP.
-    raise HTTPException(status_code=501, detail="Not implemented in MVP v0.1")
-    # return NodeListResponse(ok=True, nodes=[])
+    uc = get_list_nodes_usecase()
+    nodes = uc.handle()
+    return NodeListResponse(ok=True, nodes=nodes) # type: ignore
 
 
 @router.post("/api/v0/capture", response_model=CaptureResponse)

@@ -40,6 +40,13 @@
 驗證「Hub WS 指令廣播 -> Node 執行 -> HTTP 上傳」的流程。
 - **特點**: 基於 SSOT 原則動態解析 Hub 設定，驗證跨協議的連動性。
 
+### `verify_hub_node_registry.ps1` (Hub Registry)
+驗證 Hub 節點註冊表的持久化與查詢功能。
+- **功能**: 
+  - 啟動 Hub 與 Node。
+  - 驗證 Node 是否成功呼叫註冊 API。
+  - 驗證 `/api/v0/nodes` 是否能讀取到該節點資訊。
+
 ### `verify_node_capture_local.ps1` (Node Capture)
 驗證 Node 相機拍照功能的完整鏈路 (Unit/Mock)。
 - **功能**:
