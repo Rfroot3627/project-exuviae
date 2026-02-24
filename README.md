@@ -19,6 +19,7 @@
 
 ### 3. 核心規範 (Strict SSOT)
 所有通訊與行為皆由以下規格定義，嚴禁出現「第二真相」：
+- **[INTERFACES.md](docs/INTERFACES.md)**: **[推薦] 功能與接口概覽**（各組件功能呼叫條列）。
 - **[HTTP API 規格](hub/contracts/http/openapi.v0.yaml)**: 定義所有 REST 端點與 DTO。
 - **[WebSocket 協議](hub/contracts/ws/messages.schema.json)**: 定義即時指令與回饋訊息結構。
 - **[開發原則](docs/spec/principles.md)**: 專案必須遵守的規範與約束。
