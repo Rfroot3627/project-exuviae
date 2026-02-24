@@ -42,10 +42,7 @@ if ($runSafety) {
 
 Write-Host "`n== (1) Contract/Spec checks (root) ==" -ForegroundColor Cyan
 $specCandidates = @(
-  (Join-Path $repoRoot "tool\verify_all.py"),
-  (Join-Path $repoRoot "tool\verify_contracts.py"),
-  (Join-Path $repoRoot "system\verify_all.ps1"),
-  (Join-Path $repoRoot "system\verify_contracts.ps1")
+  (Join-Path $repoRoot "tools\validate_contracts.py")
 )
 
 $ranSpec = $false

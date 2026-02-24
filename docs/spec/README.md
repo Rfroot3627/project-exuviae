@@ -40,12 +40,16 @@
 
 ---
 
-## Definition of Done (v0.1)
-- 契約檔案存在且可被驗證（OpenAPI / JSON Schema）
-- Hub：
-  - 能接受 /register、/capture、/snapshots/upload（依契約）
-  - 能落盤 snapshot 並寫入一行 JSONL log
-- Node：
-  - 啟動後註冊 capabilities、建立 WS 連線
-  - 收到 capture 命令後拍照並上傳 snapshot
-- features 僅在啟動時決定（v0.1）
+## 🛡️ 統一驗核 (Unified Verification)
+
+為了維持規格的嚴肅性，請在任何變動後於根目錄執行：
+
+```powershell
+./scripts/check.ps1 -All
+```
+
+其內部流程即代表了本專案的 **Definition of Done (v0.1)**：
+1. **Safety Audit**: 掃描敏感資料。
+2. **Contract Check**: 驗證 `hub/contracts/` 與程式的一致性。
+3. **Unit Tests**: 執行 `pytest`。
+4. **E2E Smoke**: 執行 HTTP 與 WS 的完整鏈路演練。
