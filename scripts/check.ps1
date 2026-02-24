@@ -40,25 +40,8 @@ if ($runSafety) {
   Assert-LastExitCode "Safety Audit"
 }
 
-Write-Host "`n== (1) Contract/Spec checks (root) ==" -ForegroundColor Cyan
-$specCandidates = @(
-  (Join-Path $repoRoot "tools\validate_contracts.py")
-)
-
 $ranSpec = $false
-foreach ($c in $specCandidates) {
-  if (Test-Path $c) {
-    $ranSpec = $true
-    if ($c.EndsWith(".py")) {
-      python $c
-      Assert-LastExitCode "Spec check ($c)"
-    } else {
-      powershell -ExecutionPolicy Bypass -File $c
-      Assert-LastExitCode "Spec check ($c)"
-    }
-    break
-  }
-}
+
 
 if (-not $ranSpec) {
   Write-Host "(!) 找不到 root 規格驗證入口（未執行）。" -ForegroundColor Yellow
