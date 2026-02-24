@@ -142,14 +142,18 @@ class ConnectionManager:
             msg_type = data.get("type")
             
             if msg_type not in self._whitelist:
-                # Strict SSOT: No guessing, no unknown types
+                print(f"[WS] Dropping unknown/invalid type: {msg_type}")
                 return
                 
+            print(f"[WS] Broadcasting '{msg_type}' to {len(self.active_connections)} nodes")
             for connection in self.active_connections:
-                await connection.send_text(message)
-        except Exception:
-            # Drop invalid JSON or other errors to avoid relaying garbage
-            pass
+                try:
+                    await connection.send_text(message)
+                except Exception as e:
+                    print(f"[WS] Send failed for a connection: {e}")
+                    pass
+        except Exception as e:
+            print(f"[WS] Broadcast error: {e}")
 
 manager = ConnectionManager()
 
