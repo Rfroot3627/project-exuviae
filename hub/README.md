@@ -24,6 +24,20 @@ uvicorn exuviae_hub.main:app --port 8000 --reload
 - `EXUVIAE_SNAPSHOT_SUBDIR`: 影像子目錄 (預設 `snapshots`)
 - `EXUVIAE_VISION_LOG_FILENAME`: 日誌檔名 (預設 `vision.jsonl`)
 
+## 系統架構 (Architecture)
+Hub 採用 **Clean Architecture** 模式，確保核心領域邏輯與硬體/網路協議解耦：
+- **Domain (`core/`)**: 定義 `Node` 實體與核心規則。
+- **Application**: 包含 `Use Cases` (如 `RegisterNode`, `ListNodes`) 與 `Repository` 介面。
+- **Infrastructure**: `InMemoryNodeRepository` 與存儲適配器。
+- **Adapters**: HTTP (FastAPI) 與 WebSocket 路由。
+
+詳細架構說明請參閱 [ARCHITECTURE.md](../docs/ARCHITECTURE.md)。
+
+## 節點管理 (Node Management)
+Hub 會追蹤所有已註冊的 Node 資訊：
+- **列出所有節點**: `GET /api/v0/nodes`
+- **註冊節點**: `POST /api/v0/nodes/register` (Node 啟動時會自動呼叫)
+
 ## 測試與驗證
 Hub 包含單元測試、整合測試與 WS 廣播測試：
 
