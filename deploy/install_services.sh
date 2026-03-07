@@ -17,14 +17,18 @@ fi
 
 # 取得目前專案絕對路徑
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-CURRENT_USER=$(logname 2>/dev/null || echo $SUDO_USER || echo $USER)
-
-# 優先使用 $SUDO_USER（sudo 時記錄的原始使用者）
+# 嚴謹的使用者偵測邏輯：優先使用 sudo 原始使用者，其次是專案目錄擁有者
 if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
     CURRENT_USER="$SUDO_USER"
-elif [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
-    # 最後以目錄擁有者作為後備
-    CURRENT_USER=$(stat -c '%U' "$PROJECT_DIR")
+else
+    # 取得專案目錄的權限擁有者作為後備
+    DIR_OWNER=$(stat -c '%U' "$PROJECT_DIR")
+    if [ -n "$DIR_OWNER" ] && [ "$DIR_OWNER" != "root" ]; then
+        CURRENT_USER="$DIR_OWNER"
+    else
+        # 最後才回退到 logname 或環境變數
+        CURRENT_USER=$(logname 2>/dev/null || echo $USER)
+    fi
 fi
 
 echo "============================================="
