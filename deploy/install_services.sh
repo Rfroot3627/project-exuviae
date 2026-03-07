@@ -19,9 +19,11 @@ fi
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 CURRENT_USER=$(logname 2>/dev/null || echo $SUDO_USER || echo $USER)
 
-if [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
-    # 如果找不到原始使用者，或剛好就是 root 直接執行 (無 sudo)
-    # 取當前目錄的擁有者
+# 優先使用 $SUDO_USER（sudo 時記錄的原始使用者）
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    CURRENT_USER="$SUDO_USER"
+elif [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
+    # 最後以目錄擁有者作為後備
     CURRENT_USER=$(stat -c '%U' "$PROJECT_DIR")
 fi
 
