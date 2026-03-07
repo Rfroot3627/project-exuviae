@@ -40,6 +40,14 @@ echo "============================================="
 
 install_service() {
     local svc_name=$1
+    local sub_dir=""
+    
+    if [[ "$svc_name" == *"node"* ]]; then
+        sub_dir="$PROJECT_DIR/node"
+    elif [[ "$svc_name" == *"hub"* ]]; then
+        sub_dir="$PROJECT_DIR/hub"
+    fi
+
     local tpl_path="$PROJECT_DIR/deploy/systemd/${svc_name}.service"
     local dest_path="/etc/systemd/system/${svc_name}.service"
 
@@ -49,6 +57,17 @@ install_service() {
     fi
 
     echo "正在設定 $svc_name ..."
+    
+    # 自動建立虛擬環境與安裝相依性
+    if [ -d "$sub_dir" ]; then
+        if [ ! -d "$sub_dir/.venv" ]; then
+            echo "[環境] 正在為 $svc_name 建立虛擬環境 (.venv) ..."
+            sudo -u "$CURRENT_USER" python3 -m venv "$sub_dir/.venv"
+        fi
+        echo "[環境] 正在為 $svc_name 安裝/更新相依性 ..."
+        sudo -u "$CURRENT_USER" "$sub_dir/.venv/bin/pip" install -q -e "$sub_dir"
+    fi
+
     # 取代佔位符並寫入
     sed -e "s|PLACEHOLDER_PROJECT_DIR|$PROJECT_DIR|g" \
         -e "s|PLACEHOLDER_USER|$CURRENT_USER|g" \
