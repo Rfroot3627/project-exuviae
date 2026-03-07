@@ -17,16 +17,18 @@ fi
 
 # 取得目前專案絕對路徑
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
-# 嚴謹的使用者偵測邏輯：優先使用 sudo 原始使用者，其次是專案目錄擁有者
-if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
-    CURRENT_USER="$SUDO_USER"
+# 核心邏輯：完全根據路徑擁有者決定執行使用者 (路徑導向)
+# 這樣管理員用 sudo 部署到他人目錄時，服務仍會以該目錄擁有者執行
+DIR_OWNER=$(stat -c '%U' "$PROJECT_DIR")
+
+if [ -n "$DIR_OWNER" ] && [ "$DIR_OWNER" != "root" ]; then
+    CURRENT_USER="$DIR_OWNER"
 else
-    # 取得專案目錄的權限擁有者作為後備
-    DIR_OWNER=$(stat -c '%U' "$PROJECT_DIR")
-    if [ -n "$DIR_OWNER" ] && [ "$DIR_OWNER" != "root" ]; then
-        CURRENT_USER="$DIR_OWNER"
+    # 如果路徑屬於 root，則嘗試取得下達 sudo 的原始使用者
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+        CURRENT_USER="$SUDO_USER"
     else
-        # 最後才回退到 logname 或環境變數
+        # 最後備案
         CURRENT_USER=$(logname 2>/dev/null || echo $USER)
     fi
 fi
