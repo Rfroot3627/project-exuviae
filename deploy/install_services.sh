@@ -62,12 +62,26 @@ install_service() {
     
     # 自動建立虛擬環境與安裝相依性
     if [ -d "$sub_dir" ]; then
-        if [ ! -d "$sub_dir/.venv" ]; then
+        local venv_exists=0
+        if [ -d "$sub_dir/.venv" ]; then venv_exists=1; fi
+
+        if [ "$venv_exists" -eq 0 ]; then
             echo "[環境] 正在為 $svc_name 建立虛擬環境 (.venv) ..."
             sudo -u "$CURRENT_USER" python3 -m venv "$sub_dir/.venv"
         fi
-        echo "[環境] 正在為 $svc_name 安裝/更新相依性 ..."
-        sudo -u "$CURRENT_USER" "$sub_dir/.venv/bin/pip" install -q -e "$sub_dir"
+
+        echo "[環境] 正在為 $svc_name 安裝/更新相依性 (含重試機制) ..."
+        # 增加 Pip 重試與逾時設定
+        PIP_CMD="sudo -u $CURRENT_USER $sub_dir/.venv/bin/pip install --retries 10 --timeout 60 -q -e $sub_dir"
+        
+        if ! $PIP_CMD; then
+            if [ "$venv_exists" -eq 1 ]; then
+                echo "[警告] $svc_name 相依性更新失敗 (網路問題?)，但虛擬環境已存在，將繼續進行部署。"
+            else
+                echo "[錯誤] $svc_name 初始相依性安裝失敗，無法繼續。"
+                return 1
+            fi
+        fi
     fi
 
     # 取代佔位符並寫入
