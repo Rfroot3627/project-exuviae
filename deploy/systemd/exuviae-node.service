@@ -1,0 +1,15 @@
+[Unit]
+Description=Exuviae Node Service
+After=network.target
+
+[Service]
+Type=simple
+User=PLACEHOLDER_USER
+WorkingDirectory=PLACEHOLDER_PROJECT_DIR/node
+Environment=EXUVIAE_NODE_CONFIG=PLACEHOLDER_PROJECT_DIR/.agent/local/config.yaml
+ExecStart=PLACEHOLDER_PROJECT_DIR/node/.venv/bin/python -m exuviae_node.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

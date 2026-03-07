@@ -1,0 +1,14 @@
+[Unit]
+Description=Exuviae Hub Service
+After=network.target
+
+[Service]
+Type=simple
+User=PLACEHOLDER_USER
+WorkingDirectory=PLACEHOLDER_PROJECT_DIR/hub
+ExecStart=PLACEHOLDER_PROJECT_DIR/hub/.venv/bin/python -m uvicorn exuviae_hub.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
