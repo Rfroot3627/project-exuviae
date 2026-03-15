@@ -12,27 +12,28 @@ class LibcameraAdapter:
     Strict SSOT: Only supports what the contract allows (jpeg).
     """
     def __init__(self):
-        # Detect available command: rpicam-still (Bookworm+) or libcamera-still (Bullseye)
+        # Detect available command: rpicam-still (Bookworm+), libcamera-still (Bullseye), or ffmpeg (USB Camera)
+        self.cmd_type = "mock"
+        self.cmd = None
+        
         if shutil.which("rpicam-still"):
             self.cmd = "rpicam-still"
+            self.cmd_type = "libcamera"
         elif shutil.which("libcamera-still"):
             self.cmd = "libcamera-still"
+            self.cmd_type = "libcamera"
+        elif shutil.which("ffmpeg"):
+            self.cmd = "ffmpeg"
+            self.cmd_type = "ffmpeg"
         else:
-            self.cmd = None
-            logger.warning("No libcamera command found. Adapter will operate in MOCK mode.")
+            logger.warning("No camera command found (rpicam/libcamera/ffmpeg). Adapter will operate in MOCK mode.")
 
     def capture(self, output_path: Path, width: int, height: int, timeout_ms: int = 5000) -> bool:
         """
         Capture a JPEG image.
         """
-        if self.cmd:
-            # Real Capture
-            # -o: output
-            # -t: timeout (time before capture, practically 1ms for immediate if AF not needed, 
-            #     but let's verify usage. Standard is -t <delay_ms>). 
-            #     Let's use slight delay to allow AWB/AE if needed, or minimal.
-            # --width, --height: resolution
-            # -n: no preview
+        if self.cmd_type == "libcamera":
+            # Real Capture via libcamera
             cmd_args = [
                 self.cmd,
                 "-o", str(output_path),
@@ -43,8 +44,7 @@ class LibcameraAdapter:
             ]
             
             try:
-                logger.info(f"Executing capture: {' '.join(cmd_args)}")
-                # Run with timeout to prevent hang
+                logger.info(f"Executing libcamera capture: {' '.join(cmd_args)}")
                 subprocess.run(cmd_args, check=True, timeout=timeout_ms/1000 + 2)
                 return output_path.exists()
             except subprocess.CalledProcessError as e:
@@ -55,6 +55,34 @@ class LibcameraAdapter:
                 return False
             except Exception as e:
                 logger.error(f"Unexpected camera error: {e}")
+                return False
+                
+        elif self.cmd_type == "ffmpeg":
+            # Generic Linux USB Webcam using v4l2 and ffmpeg
+            cmd_args = [
+                "sudo", self.cmd,
+                "-y", # overwrite output
+                "-f", "v4l2",
+                "-video_size", f"{width}x{height}",
+                "-i", "/dev/video0",
+                "-frames:v", "1",
+                "-update", "1",
+                "-loglevel", "error",
+                str(output_path)
+            ]
+            
+            try:
+                logger.info(f"Executing ffmpeg capture: {' '.join(cmd_args)}")
+                subprocess.run(cmd_args, check=True, timeout=timeout_ms/1000 + 2)
+                return output_path.exists()
+            except subprocess.CalledProcessError as e:
+                logger.error(f"FFmpeg capture failed (rc={e.returncode}): {e}")
+                return False
+            except subprocess.TimeoutExpired:
+                logger.error("FFmpeg capture timed out")
+                return False
+            except Exception as e:
+                logger.error(f"Unexpected ffmpeg error: {e}")
                 return False
         else:
             # Mock Capture (Windows/Non-Pi)
