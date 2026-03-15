@@ -45,5 +45,12 @@ else
 fi
 
 echo "============================================="
+echo "[4/4] 設定 sudo 免密碼執行 ffmpeg..."
+SUDOERS_FILE="/etc/sudoers.d/exuviae_camera_${CURRENT_USER}"
+echo "${CURRENT_USER} ALL=(ALL) NOPASSWD: $(which ffmpeg)" > "$SUDOERS_FILE"
+chmod 0440 "$SUDOERS_FILE"
+echo "[成功] 已允許 $CURRENT_USER 免密碼執行 ffmpeg。"
+
+echo "============================================="
 echo "硬體權限設定完成！"
 echo "建議: 若此節點的 Node 服務已在運行，請執行 'sudo systemctl restart exuviae-node'"

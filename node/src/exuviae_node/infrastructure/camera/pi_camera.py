@@ -60,7 +60,7 @@ class LibcameraAdapter:
         elif self.cmd_type == "ffmpeg":
             # Generic Linux USB Webcam using v4l2 and ffmpeg
             cmd_args = [
-                self.cmd,
+                "sudo", self.cmd,
                 "-y", # overwrite output
                 "-f", "v4l2",
                 "-video_size", f"{width}x{height}",
