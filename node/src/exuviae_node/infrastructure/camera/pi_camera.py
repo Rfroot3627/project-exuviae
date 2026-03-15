@@ -73,11 +73,22 @@ class LibcameraAdapter:
             
             try:
                 logger.info(f"Executing ffmpeg capture: {' '.join(cmd_args)}")
-                subprocess.run(cmd_args, check=True, timeout=timeout_ms/1000 + 2)
-                return output_path.exists()
-            except subprocess.CalledProcessError as e:
-                logger.error(f"FFmpeg capture failed (rc={e.returncode}): {e}")
-                return False
+                result = subprocess.run(cmd_args, timeout=timeout_ms/1000 + 2,
+                                        capture_output=True)
+                if output_path.exists():
+                    if result.returncode != 0:
+                        logger.warning(
+                            f"FFmpeg exited with non-zero rc={result.returncode} "
+                            f"but file exists — treating as success. "
+                            f"stderr: {result.stderr.decode(errors='replace')[-200:]}"
+                        )
+                    return True
+                else:
+                    logger.error(
+                        f"FFmpeg rc={result.returncode}, file not created. "
+                        f"stderr: {result.stderr.decode(errors='replace')[-400:]}"
+                    )
+                    return False
             except subprocess.TimeoutExpired:
                 logger.error("FFmpeg capture timed out")
                 return False
